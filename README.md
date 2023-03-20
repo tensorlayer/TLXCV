@@ -1,11 +1,11 @@
 # TLXCV
-A Platform-agnostic Computer Vision Application Library, based on TensorLayerX. 
+A Platform-agnostic Computer Vision Application Library, based on [TensorLayerX](https://github.com/tensorlayer/TensorLayerX). 
 
 ## Introduction
 TLXCV  provides a set of algorithms and high-level APIs for computer vision tasks, such as image classification, object detection, semantic segmentation, etc.   
-Some of the algorithms are converted from PaddlePaddle implementations, and some are implemented from scratch.  
+Some of the algorithms are converted from [PaddlePaddle](https://github.com/PaddlePaddle) implementations, and some are implemented from scratch.  
 
-## Models
+## 模型列表 Models
 ### 分类模型 Classification
 
 | 序号 | 模型 | 类别误差 | 前后误差 | 状态 | 参考 |
