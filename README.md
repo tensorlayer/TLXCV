@@ -5,6 +5,24 @@ A Platform-agnostic Computer Vision Application Library, based on [TensorLayerX]
 TLXCV  provides a set of algorithms and high-level APIs for computer vision tasks, such as image classification, object detection, semantic segmentation, etc.   
 Some of the algorithms are converted from [PaddlePaddle](https://github.com/PaddlePaddle) implementations, and some are implemented from scratch.  
 
+## Quick Start
+### Installation
+```bash
+git clone https://github.com/tensorlayer/TLXCV.git
+cd TLXCV
+pip install -e .
+```
+
+### train
+```bash
+python demo/image_classification/train.py
+```
+
+### predict
+```bash
+python demo/image_classification/predict.py
+```
+
 ## 模型列表 Models
 ### 分类模型 Classification
 
