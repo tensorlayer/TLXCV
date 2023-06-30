@@ -1,1 +1,2 @@
 from .image_classification import ImageClassification
+from .video_classification import VideoClassification
