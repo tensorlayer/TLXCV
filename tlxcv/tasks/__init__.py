@@ -1,2 +1,3 @@
 from .image_classification import ImageClassification
+from .image_segmentation import ImageSegmentation
 from .video_classification import VideoClassification
