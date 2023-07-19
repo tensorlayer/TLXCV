@@ -1,25 +1,21 @@
 import os
-
 # os.environ['TL_BACKEND'] = 'torch'
 # os.environ['TL_BACKEND'] = 'paddle'
 os.environ['TL_BACKEND'] = 'tensorflow'
 
 import tensorlayerx as tlx
 from tensorlayerx.dataflow import DataLoader
+
 from demo.facial_landmark_detection.transform import *
 from tlxcv.datasets import Face300W
-from tlxcv.models.facial_landmark_detection import PFLD
-from tlxcv.tasks.facial_landmark_detection import FacialLandmarkDetection, NME
+from tlxcv.models import PFLD
+from tlxcv.tasks.facial_landmark_detection import NME, FacialLandmarkDetection
 
 
 if __name__ == '__main__':
     tlx.set_device()
-    if tlx.BACKEND == 'tensorflow':
-        data_format = 'channels_last'
-        data_format_short = 'HWC'
-    else:
-        data_format = 'channels_first'
-        data_format_short = 'CHW'
+    data_format = 'channels_first'
+    data_format_short = 'CHW'
 
     transforms = Compose([
         Crop(),

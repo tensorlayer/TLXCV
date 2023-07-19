@@ -7,14 +7,10 @@ from tensorlayerx.backend import convert_to_numpy
 class FacialLandmarkDetection(tlx.nn.Module):
     def __init__(self, backbone, **kwargs):
         super(FacialLandmarkDetection, self).__init__()
-        if backbone == 'pfld':
-            from tlxcv.models.facial_landmark_detection import PFLD
-            self.backbone = PFLD(**kwargs)
-        else:
-            assert isinstance(backbone, tlx.nn.Module)
-            self.backbone = backbone
+        assert isinstance(backbone, tlx.nn.Module)
+        self.backbone = backbone
 
-    def loss_fn(self, output, target, name="", **kwargs):
+    def loss_fn(self, output, target, **kwargs):
         if hasattr(self.backbone, "loss_fn"):
             return self.backbone.loss_fn(output, target)
         else:
