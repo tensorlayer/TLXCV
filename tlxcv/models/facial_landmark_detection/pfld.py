@@ -1,3 +1,5 @@
+from typing import Any, List, Optional
+
 import tensorlayerx as tlx
 from tensorlayerx import nn
 
@@ -25,16 +27,16 @@ def pfld_loss(landmarks, angle, landmark_gt, euler_angle_gt, attribute_gt):
     return tlx.reduce_mean(weight_angle * weight_attribute * l2_distant)
 
 
-def conv_bn(oup, kernel, stride, padding="SAME"):
+def conv_bn(oup, kernel, stride, padding="SAME", data_format='channels_last'):
     return nn.Sequential(
-        nn.Conv2d(oup, kernel, stride, padding=padding, b_init=None),
-        nn.BatchNorm2d(),
+        nn.Conv2d(oup, kernel, stride, padding=padding, b_init=None, data_format=data_format),
+        nn.BatchNorm2d(data_format=data_format),
         nn.ReLU()
     )
 
 
 class InvertedResidual(nn.Module):
-    def __init__(self, inp, oup, stride, use_res_connect, expand_ratio=6):
+    def __init__(self, inp, oup, stride, use_res_connect, expand_ratio=6, data_format='channels_last'):
         super(InvertedResidual, self).__init__()
         self.stride = stride
         assert stride in [1, 2]
@@ -43,7 +45,7 @@ class InvertedResidual(nn.Module):
 
         self.conv = nn.Sequential(
             nn.Conv2d(inp * expand_ratio, (1, 1), (1, 1),
-                      padding="VALID", b_init=None),
+                      padding="VALID", b_init=None, data_format=data_format),
             nn.BatchNorm2d(),
             nn.ReLU(),
             nn.GroupConv2d(
@@ -52,12 +54,13 @@ class InvertedResidual(nn.Module):
                 (stride, stride),
                 inp * expand_ratio,
                 padding="SAME",
-                b_init=None
+                b_init=None,
+                data_format=data_format
             ),
-            nn.BatchNorm2d(),
+            nn.BatchNorm2d(data_format=data_format),
             nn.ReLU(),
-            nn.Conv2d(oup, (1, 1), (1, 1), padding="VALID", b_init=None),
-            nn.BatchNorm2d(),
+            nn.Conv2d(oup, (1, 1), (1, 1), padding="VALID", b_init=None, data_format=data_format),
+            nn.BatchNorm2d(data_format=data_format),
         )
 
     def forward(self, x):
@@ -68,7 +71,7 @@ class InvertedResidual(nn.Module):
 
 
 class PFLDBackbone(nn.Module):
-    def __init__(self):
+    def __init__(self, data_format='channels_last'):
         super(PFLDBackbone, self).__init__()
 
         self.conv1 = nn.Conv2d(
@@ -76,9 +79,10 @@ class PFLDBackbone(nn.Module):
             kernel_size=(3, 3),
             stride=(2, 2),
             padding="SAME",
-            b_init=None
+            b_init=None,
+            data_format=data_format
         )
-        self.bn1 = nn.BatchNorm2d()
+        self.bn1 = nn.BatchNorm2d(data_format=data_format)
         self.relu = nn.ReLU()
 
         self.conv2 = nn.Conv2d(
@@ -86,37 +90,41 @@ class PFLDBackbone(nn.Module):
             kernel_size=(3, 3),
             stride=(1, 1),
             padding="SAME",
-            b_init=None
+            b_init=None,
+            data_format=data_format
         )
-        self.bn2 = nn.BatchNorm2d()
+        self.bn2 = nn.BatchNorm2d(data_format=data_format)
 
-        self.conv3_1 = InvertedResidual(64, 64, 2, False, 2)
-        self.block3_2 = InvertedResidual(64, 64, 1, True, 2)
-        self.block3_3 = InvertedResidual(64, 64, 1, True, 2)
-        self.block3_4 = InvertedResidual(64, 64, 1, True, 2)
-        self.block3_5 = InvertedResidual(64, 64, 1, True, 2)
+        self.conv3_1 = InvertedResidual(64, 64, 2, False, 2, data_format=data_format)
+        self.block3_2 = InvertedResidual(64, 64, 1, True, 2, data_format=data_format)
+        self.block3_3 = InvertedResidual(64, 64, 1, True, 2, data_format=data_format)
+        self.block3_4 = InvertedResidual(64, 64, 1, True, 2, data_format=data_format)
+        self.block3_5 = InvertedResidual(64, 64, 1, True, 2, data_format=data_format)
 
-        self.conv4_1 = InvertedResidual(64, 128, 2, False, 2)
+        self.conv4_1 = InvertedResidual(64, 128, 2, False, 2, data_format=data_format)
 
-        self.conv5_1 = InvertedResidual(128, 128, 1, False, 4)
-        self.block5_2 = InvertedResidual(128, 128, 1, True, 4)
-        self.block5_3 = InvertedResidual(128, 128, 1, True, 4)
-        self.block5_4 = InvertedResidual(128, 128, 1, True, 4)
-        self.block5_5 = InvertedResidual(128, 128, 1, True, 4)
-        self.block5_6 = InvertedResidual(128, 128, 1, True, 4)
+        self.conv5_1 = InvertedResidual(128, 128, 1, False, 4, data_format=data_format)
+        self.block5_2 = InvertedResidual(128, 128, 1, True, 4, data_format=data_format)
+        self.block5_3 = InvertedResidual(128, 128, 1, True, 4, data_format=data_format)
+        self.block5_4 = InvertedResidual(128, 128, 1, True, 4, data_format=data_format)
+        self.block5_5 = InvertedResidual(128, 128, 1, True, 4, data_format=data_format)
+        self.block5_6 = InvertedResidual(128, 128, 1, True, 4, data_format=data_format)
 
-        self.conv6_1 = InvertedResidual(128, 16, 1, False, 2)  # [16, 14, 14]
+        self.conv6_1 = InvertedResidual(128, 16, 1, False, 2, data_format=data_format)  # [16, 14, 14]
 
-        self.conv7 = conv_bn(32, (3, 3), (2, 2))  # [32, 7, 7]
+        self.conv7 = conv_bn(32, (3, 3), (2, 2), data_format=data_format)  # [32, 7, 7]
         self.conv8 = nn.Conv2d(128, (7, 7), (1, 1),
-                               padding="VALID")  # [128, 1, 1]
-        self.bn8 = nn.BatchNorm2d()
+                               padding="VALID", data_format=data_format)  # [128, 1, 1]
+        self.bn8 = nn.BatchNorm2d(data_format=data_format)
 
         # self.avg_pool1 = nn.MeanPool2d((14, 14), (14, 14))
         # self.avg_pool2 = nn.MeanPool2d((7, 7), (7, 7))
         self.fc = nn.Linear(136)
 
-        self.build((1, 112, 112, 3))
+        if data_format == 'channels_last':
+            self.build((1, 112, 112, 3))
+        else:
+            self.build((1, 3, 112, 112))
 
     def build(self, inputs_shape):
         ones = tlx.ones(inputs_shape)
@@ -155,18 +163,21 @@ class PFLDBackbone(nn.Module):
 
 
 class AuxiliaryNet(nn.Module):
-    def __init__(self):
+    def __init__(self, data_format='channels_last'):
         super(AuxiliaryNet, self).__init__()
-        self.conv1 = conv_bn(128, (3, 3), (2, 2))
-        self.conv2 = conv_bn(128, (3, 3), (1, 1))
-        self.conv3 = conv_bn(32, (3, 3), (2, 2))
-        self.conv4 = conv_bn(128, (7, 7), (1, 1), padding='VALID')
-        # self.max_pool1 = nn.MaxPool2d((3, 3), (3, 3))
+        self.conv1 = conv_bn(128, (3, 3), (2, 2), data_format=data_format)
+        self.conv2 = conv_bn(128, (3, 3), (1, 1), data_format=data_format)
+        self.conv3 = conv_bn(32, (3, 3), (2, 2), data_format=data_format)
+        self.conv4 = conv_bn(128, (7, 7), (1, 1), padding='VALID', data_format=data_format)
+        # self.max_pool1 = nn.MaxPool2d((3, 3), (3, 3), data_format=data_format)
         self.fc1 = nn.Linear(32)
         self.fc2 = nn.Linear(3)
 
         # just for warmup
-        self.build((2, 28, 28, 64))
+        if data_format == 'channels_last':
+            self.build((2, 28, 28, 64))
+        else:
+            self.build((2, 64, 28, 28))
 
     def build(self, inputs_shape):
         ones = tlx.ones(inputs_shape)
@@ -186,10 +197,15 @@ class AuxiliaryNet(nn.Module):
 
 
 class PFLD(nn.Module):
-    def __init__(self, **kwargs):
-        super(PFLD, self).__init__()
-        self.backbone = PFLDBackbone()
-        self.auxiliarynet = AuxiliaryNet()
+    def __init__(
+        self,
+        data_format: str = 'channels_last',
+        name: Optional[str] = None,
+        **kwargs
+    ) -> None:
+        super(PFLD, self).__init__(name)
+        self.backbone = PFLDBackbone(data_format=data_format)
+        self.auxiliarynet = AuxiliaryNet(data_format=data_format)
 
     def forward(self, x):
         return self.backbone(x)

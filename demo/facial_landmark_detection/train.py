@@ -1,15 +1,25 @@
 import os
-os.environ['TL_BACKEND'] = 'torch'
+
+# os.environ['TL_BACKEND'] = 'torch'
+# os.environ['TL_BACKEND'] = 'paddle'
+os.environ['TL_BACKEND'] = 'tensorflow'
 
 import tensorlayerx as tlx
 from tensorlayerx.dataflow import DataLoader
-from tlxcv.datasets import Face300W
 from demo.facial_landmark_detection.transform import *
+from tlxcv.datasets import Face300W
+from tlxcv.models.facial_landmark_detection import PFLD
 from tlxcv.tasks.facial_landmark_detection import FacialLandmarkDetection, NME
 
 
 if __name__ == '__main__':
     tlx.set_device()
+    if tlx.BACKEND == 'tensorflow':
+        data_format = 'channels_last'
+        data_format_short = 'HWC'
+    else:
+        data_format = 'channels_first'
+        data_format_short = 'CHW'
 
     transforms = Compose([
         Crop(),
@@ -20,13 +30,15 @@ if __name__ == '__main__':
         Normalize(),
         CalculateEulerAngles(),
         ToTuple(),
+        ToTensor(data_format=data_format_short)
     ])
     train_dataset = Face300W('./data/300W', split='train', transforms=transforms)
     train_dataloader = DataLoader(train_dataset, batch_size=64)
     test_dataset = Face300W('./data/300W', split='test', transforms=transforms)
     test_dataloader = DataLoader(test_dataset, batch_size=16)
 
-    model = FacialLandmarkDetection('pfld')
+    backbone = PFLD(data_format=data_format)
+    model = FacialLandmarkDetection(backbone)
 
     optimizer = tlx.optimizers.Adam(1e-4, weight_decay=1e-6)
     metrics = NME()
