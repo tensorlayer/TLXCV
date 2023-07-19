@@ -1,11 +1,10 @@
 import os
 import re
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 from scipy.io import loadmat
 from tensorlayerx.vision import load_image
-from traitlets import Callable
 
 from .vision import VisionDataset
 

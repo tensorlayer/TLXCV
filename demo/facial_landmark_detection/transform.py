@@ -2,6 +2,7 @@ import random
 
 import cv2
 import numpy as np
+from tensorlayerx.vision.transforms.functional import to_tensor
 
 
 def calculate_pitch_yaw_roll(landmarks_2D,
@@ -193,6 +194,17 @@ class CalculateEulerAngles(object):
 class ToTuple(object):
     def __call__(self, image, label):
         return image, (label['landmark'], label['euler_angles'])
+
+
+class ToTensor(object):
+    def __init__(self, data_format='HWC'):
+        if not data_format in ['CHW', 'HWC']:
+            raise ValueError('data_format should be CHW or HWC. Got {}'.format(data_format))
+        self.data_format = data_format
+
+    def __call__(self, image, label):
+        image = to_tensor(image, self.data_format)
+        return image, label
 
 
 class Compose(object):
