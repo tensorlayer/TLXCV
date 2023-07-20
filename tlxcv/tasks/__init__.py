@@ -1,4 +1,5 @@
 from .image_classification import ImageClassification
 from .image_segmentation import ImageSegmentation
-from .facial_landmark_detection import FacialLandmarkDetection
+from .facial_landmark_detection import FacialLandmarkDetection, NME
+from .human_pose_estimation import HumanPoseEstimation
 from .video_classification import VideoClassification
