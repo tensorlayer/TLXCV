@@ -1,14 +1,6 @@
 import os
 
-import tensorlayerx as tlx
-from tensorlayerx.dataflow import DataLoader
-from tensorlayerx.vision.transforms import Compose
-from transform import *
-
-from tlxcv.datasets import Face300W
-from tlxcv.models import PFLD
-from tlxcv.tasks.facial_landmark_detection import NME, FacialLandmarkDetection
-
+# NOTE: need to set backend before `import tensorlayerx`
 # os.environ['TL_BACKEND'] = 'torch'
 # os.environ['TL_BACKEND'] = 'paddle'
 os.environ['TL_BACKEND'] = 'tensorflow'
@@ -18,8 +10,19 @@ os.environ['TL_BACKEND'] = 'tensorflow'
 data_format = 'channels_last'
 data_format_short = 'HWC'
 
+import tensorlayerx as tlx
+from tensorlayerx.dataflow import DataLoader
+from tensorlayerx.vision.transforms import Compose
+from transform import *
+
+from tlxcv.datasets import Face300W
+from tlxcv.models import PFLD
+from tlxcv.tasks.facial_landmark_detection import NME, FacialLandmarkDetection
+
 
 if __name__ == '__main__':
+    tlx.set_device('GPU')
+
     transforms = Compose([
         Crop(),
         Resize(size=(112, 112)),
@@ -49,7 +52,7 @@ if __name__ == '__main__':
 
     optimizer = tlx.optimizers.Adam(1e-4, weight_decay=1e-6)
     metrics = NME()
-    n_epoch = 500
+    n_epoch = 1
 
     trainer = tlx.model.Model(
         network=model,

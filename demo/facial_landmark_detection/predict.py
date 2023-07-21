@@ -1,13 +1,6 @@
 import os
 
-import tensorlayerx as tlx
-from tensorlayerx.vision import load_image, save_image
-from tensorlayerx.vision.transforms import Compose, Normalize, Resize, ToTensor
-
-from tlxcv.models.facial_landmark_detection import PFLD
-from tlxcv.tasks.facial_landmark_detection import (FacialLandmarkDetection,
-                                                   draw_landmarks)
-
+# NOTE: need to set backend before `import tensorlayerx`
 # os.environ['TL_BACKEND'] = 'torch'
 # os.environ['TL_BACKEND'] = 'paddle'
 os.environ['TL_BACKEND'] = 'tensorflow'
@@ -18,7 +11,18 @@ data_format = 'channels_last'
 data_format_short = 'HWC'
 
 
+import tensorlayerx as tlx
+from tensorlayerx.vision import load_image, save_image
+from tensorlayerx.vision.transforms import Compose, Normalize, Resize, ToTensor
+
+from tlxcv.models.facial_landmark_detection import PFLD
+from tlxcv.tasks.facial_landmark_detection import (FacialLandmarkDetection,
+                                                   draw_landmarks)
+
+
 if __name__ == '__main__':
+    tlx.set_device('GPU')
+
     backbone = PFLD(data_format=data_format)
     model = FacialLandmarkDetection(backbone)
     model.load_weights("./demo/facial_landmark_detection/model.npz")
