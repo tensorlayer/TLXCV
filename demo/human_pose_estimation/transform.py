@@ -2,52 +2,65 @@ import numpy as np
 import cv2
 
 
+class Compose(object):
+    """Composes several transforms together.
+
+    Parameters
+    ----------
+    transforms : list of 'transform' objects
+        list of transforms to compose.
+    """
+
+    def __init__(self, transforms):
+        self.transforms = transforms
+
+    def __call__(self, image, label):
+        for t in self.transforms:
+            image, label = t(image, label)
+        return image, label
+
+
 class Gather(object):
-    def __call__(self, data):
-        image = np.array(data['image'])
-        bbox = data['annotations']['bbox']
+    def __call__(self, image, label):
+        image = np.array(image)
+        bbox = label['annotations']['bbox']
         bbox = [int(i) for i in bbox]
-        keypoints = data['annotations']['keypoints']
+        keypoints = label['annotations']['keypoints']
         keypoints = np.array(keypoints, dtype=np.int)
         keypoints = np.reshape(keypoints, newshape=(-1, 3))
-        return {
-            'image': image,
-            'bbox': bbox,
-            'keypoints': keypoints
-        }
+
+        label = bbox, keypoints
+        return image, label
 
 
 class Crop(object):
-    def __call__(self, data):
-        image, bbox, keypoints = data['image'], data['bbox'], data['keypoints']
+    def __call__(self, image, label):
+        bbox, keypoints = label
 
-        image = image[bbox[1]: (bbox[1] + bbox[3]), bbox[0]: (bbox[0] + bbox[2]), :]
+        image = image[bbox[1]: (bbox[1] + bbox[3]),
+                      bbox[0]: (bbox[0] + bbox[2]), :]
         mask = keypoints[:, 2] > 0
         keypoints[:, 0][mask] -= bbox[0]
         keypoints[:, 1][mask] -= bbox[1]
 
-        return {
-            'image': image,
-            'keypoints': keypoints
-        }
-        
-    
+        label = keypoints
+        return image, label
+
+
 class Resize(object):
     def __init__(self, size):
         self.size = size
 
-    def __call__(self, data):
-        image, keypoints = data['image'], data['keypoints'].astype(np.float32)
+    def __call__(self, image, label):
+        keypoints = label.astype(np.float32)
         origin_shape = image.shape[:2]
         
         image = cv2.resize(image, self.size)
         keypoints[:, 0] *= self.size[1] / origin_shape[1]
         keypoints[:, 1] *= self.size[0] / origin_shape[0]
-        
-        return {
-            'image': image,
-            'keypoints': keypoints.astype(np.int)
-        }
+        label = keypoints.astype(np.int)
+
+        return image, label
 
 
 class Normalize(object):
@@ -55,9 +68,9 @@ class Normalize(object):
         self.mean = np.array(mean, dtype=np.float32)
         self.std = np.array(std, dtype=np.float32)
     
-    def __call__(self, data):
-        data['image'] = (data['image'].astype(np.float32) - self.mean) / self.std
-        return data
+    def __call__(self, image, label):
+        image = (image.astype(np.float32) - self.mean) / self.std
+        return image, label
 
 
 class GenerateTarget(object):
@@ -74,7 +87,6 @@ class GenerateTarget(object):
         self.num_of_joints = num_of_joints
         self.heatmap_size = heatmap_size
         self.sigma = sigma
-
 
     def _get_keypoints_3d(self, keypoints):
         keypoints_3d_list = []
@@ -127,13 +139,8 @@ class GenerateTarget(object):
         target = np.transpose(target, [1, 2, 0])
         return target, target_weight
 
-    def __call__(self, data, *args, **kwargs):
-        image, keypoints = data['image'], data['keypoints']
-        keypoints_3d, keypoints_3d_exist = self._get_keypoints_3d(keypoints)
+    def __call__(self, image, label):
+        keypoints_3d, keypoints_3d_exist = self._get_keypoints_3d(label)
         target, target_weight = self._generate_target(keypoints_3d, keypoints_3d_exist)
-        return {
-            'image': image,
-            'target': target,
-            'target_weight': target_weight
-        }
-
+        label = target, target_weight
+        return image, label
