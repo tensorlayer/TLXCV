@@ -1,25 +1,25 @@
+from typing import Any
+
 import cv2
 import numpy as np
 import tensorlayerx as tlx
-from tensorlayerx.backend import convert_to_numpy
 
 
 class FacialLandmarkDetection(tlx.nn.Module):
-    def __init__(self, backbone, **kwargs):
-        super(FacialLandmarkDetection, self).__init__()
-        assert isinstance(backbone, tlx.nn.Module)
+    def __init__(self, backbone: tlx.nn.Module) -> None:
+        super().__init__()
         self.backbone = backbone
 
-    def loss_fn(self, output, target, **kwargs):
+    def loss_fn(self, output: Any, target: Any) -> Any:
         if hasattr(self.backbone, "loss_fn"):
             return self.backbone.loss_fn(output, target)
         else:
             raise ValueError("loss fn isn't defined.")
 
-    def forward(self, inputs, **kwargs):
-        return self.backbone(inputs, **kwargs)
+    def forward(self, inputs: Any) -> Any:
+        return self.backbone(inputs)
 
-    def predict(self, inputs):
+    def predict(self, inputs: Any) -> Any:
         self.set_eval()
         return self.backbone(inputs)
 
@@ -50,9 +50,9 @@ class NME(object):
         if type(pred) == tuple:
             pred = pred[0]
             target = target[0]
-        
-        pred = convert_to_numpy(pred)
-        target = convert_to_numpy(target)
+
+        pred = tlx.convert_to_numpy(pred)
+        target = tlx.convert_to_numpy(target)
 
         batch_size = len(pred)
         pred = np.array(pred).reshape((batch_size, -1, 2))
@@ -78,6 +78,6 @@ class NME(object):
         self.num = 0
 
     def result(self):
-        if self.num <=0:
+        if self.num <= 0:
             return 0.0
         return self.sum / self.num

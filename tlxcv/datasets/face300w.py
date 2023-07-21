@@ -1,6 +1,6 @@
 import os
 import re
-from typing import Callable, Optional
+from typing import Any, Callable, Optional, Tuple
 
 import numpy as np
 from scipy.io import loadmat
@@ -22,7 +22,7 @@ class Face300W(VisionDataset):
     def __init__(
         self,
         root: str,
-        split='train',
+        split: str = 'train',
         transforms: Optional[Callable] = None,
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None
@@ -41,7 +41,6 @@ class Face300W(VisionDataset):
                 ('lfpw/testset', 'Bounding Boxes/bounding_boxes_lfpw_testset.mat'),
                 ('ibug', 'Bounding Boxes/bounding_boxes_ibug.mat')
             ]
-        self.transform = transform
         self.image_filenames = []
         self.bboxes = []
         self.landmarks = []
@@ -63,20 +62,17 @@ class Face300W(VisionDataset):
                 pts_filename = os.path.splitext(image_filename)[0] + '.pts'
                 self.landmarks.append(read_pts_file(pts_filename))
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
         image = load_image(self.image_filenames[index])
         bbox = self.bboxes[index]
         landmark = self.landmarks[index]
-
-        image = image.astype(np.float32)
         label = {
             'bbox': bbox,
             'landmark': landmark
         }
         if self.transforms:
-            data = image, label
-            image, label = self.transforms(data)
+            image, label = self.transforms((image, label))
         return image, label
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.image_filenames)
