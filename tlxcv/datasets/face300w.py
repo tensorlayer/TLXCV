@@ -74,7 +74,8 @@ class Face300W(VisionDataset):
             'landmark': landmark
         }
         if self.transforms:
-            image, label = self.transforms(image, label)
+            data = image, label
+            image, label = self.transforms(data)
         return image, label
 
     def __len__(self):

@@ -131,7 +131,8 @@ def normalize(image):
 
 
 class Crop(object):
-    def __call__(self, image, label):
+    def __call__(self, data):
+        image, label = data
         label['landmark'] = np.asarray(label['landmark'], dtype=np.float32).reshape((-1, 2))
         image, label['landmark'] = crop(image, label['landmark'])
         return image, label
@@ -141,7 +142,8 @@ class Resize(object):
     def __init__(self, size):
         self.size = size
 
-    def __call__(self, image, label):
+    def __call__(self, data):
+        image, label = data
         image, label['landmark'] = resize(image, self.size, label['landmark'])
         label['size'] = self.size
         return image, label
@@ -151,7 +153,8 @@ class RandomHorizontalFlip(object):
     mirror_indexes = [16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 27, 28, 29, 30, 35, 34,
                       33, 32, 31, 45, 44, 43, 42, 47, 46, 39, 38, 37, 36, 41, 40, 54, 53, 52, 51, 50, 49, 48, 59, 58, 57, 56, 55, 64, 63, 62, 61, 60, 67, 66, 65]
     
-    def __call__(self, image, label):
+    def __call__(self, data):
+        image, label = data
         image, label['landmark'] = random_horizontal_flip(image, label['landmark'], self.mirror_indexes)
         return image, label
 
@@ -160,7 +163,8 @@ class RandomRotate(object):
     def __init__(self, angle_range):
         self.angle_range = angle_range
         
-    def __call__(self, image, label):
+    def __call__(self, data):
+        image, label = data
         image, label['landmark'] = random_rotate(image, label['landmark'], self.angle_range)
         return image, label
 
@@ -169,13 +173,15 @@ class RandomOcclude(object):
     def __init__(self, occlude_size):
         self.occlude_size = occlude_size
         
-    def __call__(self, image, label):
+    def __call__(self, data):
+        image, label = data
         image = random_occlude(image, self.occlude_size)
         return image, label
 
 
 class Normalize(object):
-    def __call__(self, image, label):
+    def __call__(self, data):
+        image, label = data
         image = normalize(image)
         label['landmark'][:, 0] /= label['size'][0]
         label['landmark'][:, 1] /= label['size'][1]
@@ -185,14 +191,16 @@ class Normalize(object):
 class CalculateEulerAngles(object):
     tracked_points = [17, 21, 22, 26, 36, 39, 42, 45, 31, 35, 48, 54, 57, 8]
     
-    def __call__(self, image, label):
+    def __call__(self, data):
+        image, label = data
         euler_angles = calculate_pitch_yaw_roll(label['landmark'][self.tracked_points])
         label['euler_angles'] = np.asarray(euler_angles, dtype=np.float32)
         return image, label
 
 
 class ToTuple(object):
-    def __call__(self, image, label):
+    def __call__(self, data):
+        image, label = data
         return image, (label['landmark'], label['euler_angles'])
 
 
@@ -202,24 +210,7 @@ class ToTensor(object):
             raise ValueError('data_format should be CHW or HWC. Got {}'.format(data_format))
         self.data_format = data_format
 
-    def __call__(self, image, label):
+    def __call__(self, data):
+        image, label = data
         image = to_tensor(image, self.data_format)
-        return image, label
-
-
-class Compose(object):
-    """Composes several transforms together.
-
-    Parameters
-    ----------
-    transforms : list of 'transform' objects
-        list of transforms to compose.
-    """
-
-    def __init__(self, transforms):
-        self.transforms = transforms
-
-    def __call__(self, image, label):
-        for t in self.transforms:
-            image, label = t(image, label)
         return image, label

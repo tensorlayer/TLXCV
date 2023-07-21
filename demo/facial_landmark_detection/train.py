@@ -6,7 +6,8 @@ os.environ['TL_BACKEND'] = 'tensorflow'
 import tensorlayerx as tlx
 from tensorlayerx.dataflow import DataLoader
 
-from demo.facial_landmark_detection.transform import *
+from tensorlayerx.vision.transforms import Compose
+from transform import *
 from tlxcv.datasets import Face300W
 from tlxcv.models import PFLD
 from tlxcv.tasks.facial_landmark_detection import NME, FacialLandmarkDetection
