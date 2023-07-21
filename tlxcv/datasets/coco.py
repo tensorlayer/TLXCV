@@ -80,7 +80,8 @@ class CocoDetection(CocoData):
         }
 
         if self.transforms:
-            image, label = self.transforms(image, label)
+            data = image, label
+            image, label = self.transforms(data)
         return image, label
 
 
@@ -129,5 +130,6 @@ class CocoHumanPoseEstimation(CocoData):
         }
 
         if self.transforms:
-            image, label = self.transforms(image, label)
+            data = image, label
+            image, label = self.transforms(data)
         return image, label

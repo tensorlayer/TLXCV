@@ -2,26 +2,9 @@ import numpy as np
 import cv2
 
 
-class Compose(object):
-    """Composes several transforms together.
-
-    Parameters
-    ----------
-    transforms : list of 'transform' objects
-        list of transforms to compose.
-    """
-
-    def __init__(self, transforms):
-        self.transforms = transforms
-
-    def __call__(self, image, label):
-        for t in self.transforms:
-            image, label = t(image, label)
-        return image, label
-
-
 class Gather(object):
-    def __call__(self, image, label):
+    def __call__(self, data):
+        image, label = data
         image = np.array(image)
         bbox = label['annotations']['bbox']
         bbox = [int(i) for i in bbox]
@@ -34,7 +17,8 @@ class Gather(object):
 
 
 class Crop(object):
-    def __call__(self, image, label):
+    def __call__(self, data):
+        image, label = data
         bbox, keypoints = label
 
         image = image[bbox[1]: (bbox[1] + bbox[3]),
@@ -51,7 +35,8 @@ class Resize(object):
     def __init__(self, size):
         self.size = size
 
-    def __call__(self, image, label):
+    def __call__(self, data):
+        image, label = data
         keypoints = label.astype(np.float32)
         origin_shape = image.shape[:2]
         
@@ -68,7 +53,8 @@ class Normalize(object):
         self.mean = np.array(mean, dtype=np.float32)
         self.std = np.array(std, dtype=np.float32)
     
-    def __call__(self, image, label):
+    def __call__(self, data):
+        image, label = data
         image = (image.astype(np.float32) - self.mean) / self.std
         return image, label
 
@@ -139,7 +125,8 @@ class GenerateTarget(object):
         target = np.transpose(target, [1, 2, 0])
         return target, target_weight
 
-    def __call__(self, image, label):
+    def __call__(self, data):
+        image, label = data
         keypoints_3d, keypoints_3d_exist = self._get_keypoints_3d(label)
         target, target_weight = self._generate_target(keypoints_3d, keypoints_3d_exist)
         label = target, target_weight

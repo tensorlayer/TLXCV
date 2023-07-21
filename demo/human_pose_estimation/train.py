@@ -5,12 +5,13 @@ os.environ['TL_BACKEND'] = 'tensorflow'
 
 import tensorlayerx as tlx
 from tensorlayerx.dataflow import DataLoader
+from tensorlayerx.vision.transforms import Compose
+from transform import *
 
-from demo.human_pose_estimation.transform import *
 from tlxcv.datasets import CocoHumanPoseEstimation
 from tlxcv.models import PoseHighResolutionNet
-from tlxcv.tasks.human_pose_estimation import HumanPoseEstimation, Trainer, EpochDecay
-
+from tlxcv.tasks.human_pose_estimation import (EpochDecay, HumanPoseEstimation,
+                                               Trainer)
 
 if __name__ == '__main__':
     tlx.set_device()
