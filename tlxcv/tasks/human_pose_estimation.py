@@ -31,21 +31,7 @@ class HumanPoseEstimation(tlx.nn.Module):
 
 def get_final_preds(batch_heatmaps):
     preds, maxval = get_max_preds(batch_heatmaps)
-    num_of_joints = preds.shape[-1]
-    batch_size = preds.shape[0]
-    batch_x = []
-    batch_y = []
-    for b in range(batch_size):
-        single_image_x = []
-        single_image_y = []
-        for j in range(num_of_joints):
-            point_x = int(preds[b, 0, j])
-            point_y = int(preds[b, 1, j])
-            single_image_x.append(point_x)
-            single_image_y.append(point_y)
-        batch_x.append(single_image_x)
-        batch_y.append(single_image_y)
-    return batch_x, batch_y
+    return preds
 
 
 def get_dye_vat_bgr():
@@ -69,122 +55,91 @@ def color_pool():
     return bgr_color_pool
 
 
-def draw_on_image(image, x, y, rescale):
-    keypoints_coords = []
-    for j in range(len(x)):
-        x_coord, y_coord = rescale(x=x[j], y=y[j])
-        keypoints_coords.append([x_coord, y_coord])
-        cv2.circle(img=image, center=(x_coord, y_coord), radius=8, color=get_dye_vat_bgr()["Red"], thickness=2)
+def draw_on_image(image, kpts):
+    kpts = kpts.astype(int)
+    for x, y in kpts:
+        cv2.circle(img=image, center=(x, y), radius=8, color=get_dye_vat_bgr()["Red"], thickness=2)
+
     # draw lines
     color_list = color_pool()
     SKELETON = [[16, 14], [14, 12], [17, 15], [15, 13], [12, 13], [6, 12], [7, 13], [6, 7], [6, 8], [7, 9],
                 [8, 10], [9, 11], [2, 3], [1, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7]]
-
-    for i in range(len(SKELETON)):
-        index_1 = SKELETON[i][0] - 1
-        index_2 = SKELETON[i][1] - 1
-        x1, y1 = rescale(x=x[index_1], y=y[index_1])
-        x2, y2 = rescale(x=x[index_2], y=y[index_2])
-        cv2.line(img=image, pt1=(x1, y1), pt2=(x2, y2), color=color_list[i % len(color_list)], thickness=5, lineType=cv2.LINE_AA)
+    for i, (s1, s2) in enumerate(SKELETON):
+        pt1 = kpts[s1 - 1].tolist()
+        pt2 = kpts[s2 - 1].tolist()
+        cv2.line(img=image, pt1=pt1, pt2=pt2, color=color_list[i % len(color_list)], thickness=5, lineType=cv2.LINE_AA)
     return image
 
 
-def inference(image_tensor, model, image, original_image_size):
+def inference(image_tensor, model, image, original_image_size, data_format='channels_last'):
+    assert image_tensor.shape[0] == 1
+
     model.set_eval()
     pred_heatmap = model(image_tensor)
-    keypoints_rescale = KeypointsRescaleToOriginal(input_image_height=256,
-                                                   input_image_width=256,
-                                                   heatmap_h=pred_heatmap.shape[1],
-                                                   heatmap_w=pred_heatmap.shape[2],
-                                                   original_image_size=original_image_size)
-    batch_x_list, batch_y_list = get_final_preds(batch_heatmaps=pred_heatmap)
-    keypoints_x = batch_x_list[0]
-    keypoints_y = batch_y_list[0]
-    image = draw_on_image(image=image, x=keypoints_x, y=keypoints_y, rescale=keypoints_rescale)
+    heatmap = tlx.convert_to_numpy(pred_heatmap)
+    if data_format == 'channels_first':
+        heatmap = heatmap.transpose((0, 2, 3, 1))
+
+    # shape: (N, 17, 2)
+    pred_points = get_final_preds(batch_heatmaps=heatmap)
+    _, h, w, _ = heatmap.shape
+    W, H = original_image_size
+    points = pred_points / (w, h) * (W, H)
+    kpts = points[0].astype(int)
+
+    # shape: (17, 2)
+    image = draw_on_image(image=image, kpts=kpts)
     return image
 
 
-class KeypointsRescaleToOriginal(object):
-    def __init__(self, input_image_height, input_image_width, heatmap_h, heatmap_w, original_image_size):
-        self.scale_ratio = [input_image_height / heatmap_h, input_image_width / heatmap_w]
-        self.original_scale_ratio = [original_image_size[0] / input_image_height, original_image_size[1] / input_image_width]
-
-    def __scale_to_input_size(self, x, y):
-        return x * self.scale_ratio[1], y * self.scale_ratio[0]
-
-    def __call__(self, x, y):
-        temp_x, temp_y = self.__scale_to_input_size(x=x, y=y)
-        return int(temp_x * self.original_scale_ratio[1]), int(temp_y * self.original_scale_ratio[0])
-
-
-def get_max_preds(heatmap_tensor):
-    heatmap = tlx.convert_to_numpy(heatmap_tensor)
-    batch_size, _, width, num_of_joints = heatmap.shape[0], heatmap.shape[1], heatmap.shape[2], heatmap.shape[-1]
+def get_max_preds(heatmap):
+    # heatmap shape: (N, H, W, C)
+    batch_size, height, width, num_of_joints = heatmap.shape
     heatmap = heatmap.reshape((batch_size, -1, num_of_joints))
     index = np.argmax(heatmap, axis=1)
     maxval = np.amax(heatmap, axis=1)
-    index = index.reshape((batch_size, 1, num_of_joints))
-    maxval = maxval.reshape((batch_size, 1, num_of_joints))
-    preds = np.tile(index, (1, 2, 1)).astype(np.float32)
 
-    preds[:, 0, :] = preds[:, 0, :] % width
-    preds[:, 1, :] = np.floor(preds[:, 1, :] / width)
-
-    pred_mask = np.tile(np.greater(maxval, 0.0), (1, 2, 1))
-    pred_mask = pred_mask.astype(np.float32)
-    preds *= pred_mask
-
+    x, y = index % width, index // height
+    preds = np.dstack((x, y))
+    preds[maxval <= 0] = -1
     return preds, maxval
 
 
 class PCK(object):
-    def __init__(self, threshold=0.5):
+    def __init__(self, threshold=0.05, data_format='channels_last'):
         self.threshold = threshold
+        self.data_format = data_format
 
     def __call__(self, network_output, target):
-        _, h, w, c = network_output.shape
-        index = list(range(c))
-        pred, _ = get_max_preds(heatmap_tensor=network_output)
-        target, _ = get_max_preds(heatmap_tensor=target)
-        normalize = np.ones((pred.shape[0], 2)) * np.array([h, w]) / 10
-        distance = self.__calculate_distance(pred, target, normalize)
+        heatmap = tlx.convert_to_numpy(network_output)
+        target = tlx.convert_to_numpy(target)
+        if self.data_format == 'channels_first':
+            heatmap = heatmap.transpose((0, 2, 3, 1))
+            target = target.transpose((0, 2, 3, 1))
+        _, h, w, c = heatmap.shape
 
-        accuracy = np.zeros((len(index) + 1))
-        average_accuracy = 0
-        count = 0
-
-        for i in range(c):
-            accuracy[i + 1] = self.__distance_accuracy(distance[index[i]])
-            if accuracy[i + 1] > 0:
-                average_accuracy += accuracy[i + 1]
-                count += 1
-        average_accuracy = average_accuracy / count if count != 0 else 0
-        if count != 0:
-            accuracy[0] = average_accuracy
-        return accuracy, average_accuracy, count, pred
+        pred, _ = get_max_preds(heatmap)
+        target, _ = get_max_preds(target)
+        distance, mask = self.__calculate_distance(pred, target, heat_shape=(h, w))
+        avg_accuracy = self.__distance_accuracy(distance, mask)
+        return avg_accuracy
 
     @staticmethod
-    def __calculate_distance(pred, target, normalize):
-        pred = pred.astype(np.float32)
-        target = target.astype(np.float32)
-        distance = np.zeros((pred.shape[-1], pred.shape[0]))
-        for n in range(pred.shape[0]):
-            for c in range(pred.shape[-1]):
-                if target[n, 0, c] > 1 and target[n, 1, c] > 1:
-                    normed_preds = pred[n, :, c] / normalize[n]
-                    normed_targets = target[n, :, c] / normalize[n]
-                    distance[c, n] = np.linalg.norm(normed_preds - normed_targets)
-                else:
-                    distance[c, n] = -1
-        return distance
+    def __calculate_distance(pred:np.ndarray, target:np.ndarray, heat_shape):
+        pred = pred.astype(np.float32) / heat_shape
+        target = target.astype(np.float32) / heat_shape
+        distance = np.linalg.norm(pred - target, axis=-1)
 
-    def __distance_accuracy(self, distance):
-        distance_calculated = np.not_equal(distance, -1)
-        num_dist_cal = distance_calculated.sum()
-        if num_dist_cal > 0:
-            return np.less(distance[distance_calculated], self.threshold).sum() * 1.0 / num_dist_cal
-        else:
-            return -1
+        mask = (target >= 0).all(axis=-1)
+        distance[~mask] = -1
+        return distance, mask
+
+    def __distance_accuracy(self, distance, mask):
+        valid_num = mask.sum()
+        if valid_num > 0:
+            return (distance[mask] < self.threshold).sum() / valid_num
+
+        return -1
 
 
 class CocoEvaluator(object):
@@ -257,8 +212,7 @@ class CocoEvaluator(object):
                         "category_id": labels[k],
                         "bbox": box,
                         "score": scores[k],
-                    }
-                    for k, box in enumerate(boxes)
+                    } for k, box in enumerate(boxes)
                 ]
             )
         return coco_results
@@ -271,7 +225,6 @@ class CocoEvaluator(object):
                 continue
 
             masks = prediction["masks"]
-
             masks = masks > 0.5
 
             scores = prediction["scores"].tolist()
@@ -291,20 +244,17 @@ class CocoEvaluator(object):
                         "category_id": labels[k],
                         "segmentation": rle,
                         "score": scores[k],
-                    }
-                    for k, rle in enumerate(rles)
+                    } for k, rle in enumerate(rles)
                 ]
             )
         return coco_results
 
 
 def convert_to_xywh(boxes):
-    xmin = boxes[:, 0]
-    ymin = boxes[:, 1]
-    xmax = boxes[:, 2]
-    ymax = boxes[:, 3]
+    boxes = boxes.copy()
+    boxes[:, 2:] -= boxes[:, :2]
 
-    return tlx.convert_to_numpy(tlx.stack((xmin, ymin, xmax - xmin, ymax - ymin), axis=1))
+    return tlx.convert_to_numpy(boxes)
 
 
 def evaluate(self):
@@ -406,9 +356,9 @@ class EpochDecay(LRScheduler):
 
 
 class Trainer(tlx.model.Model):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, data_format='channels_last', **kwargs):
         super().__init__(*args, **kwargs)
-        self.pck = PCK()
+        self.pck = PCK(data_format=data_format)
 
     def tf_train(
         self,
@@ -435,7 +385,7 @@ class Trainer(tlx.model.Model):
 
         def _forward_acc(_logits, y_batch):
             target, target_weight = y_batch
-            _, avg_accuracy, _, _ = self.pck(network_output=_logits, target=target)
+            avg_accuracy= self.pck(network_output=_logits, target=target)
             return avg_accuracy
 
         train_frame(
@@ -466,7 +416,7 @@ class Trainer(tlx.model.Model):
 
         def _forward_acc(_logits, y_batch):
             target, target_weight = y_batch
-            _, avg_accuracy, _, _ = self.pck(network_output=_logits, target=target)
+            avg_accuracy = self.pck(network_output=_logits, target=target)
             return avg_accuracy
 
         train_frame(
@@ -515,9 +465,6 @@ def train_frame(
                     print("   train loss: {}".format(train_loss / batch))
                     print("   train acc:  {}".format(train_acc / batch))
                 progress.advance(batch_tqdm, advance=1)
-                # TODO: del this test code
-                if batch >= 2:
-                    break
 
             if epoch == 1 or epoch % print_freq == 0:
                 print("Epoch {} of {} took {}".format(epoch, n_epoch, time.time() - start_time))
@@ -540,9 +487,7 @@ def train_frame(
                             val_acc += metrics.result()
                             metrics.reset()
                         else:
-                            val_acc += forward_callback(output, y_batch)
-                        if batch >= 5:
-                            break
+                            val_acc += forward_callback(_logits, y_batch)
                         progress.advance(batch_tqdm, advance=1)
                     print("   val loss: {}".format(val_loss / epoch))
                     print("   val acc:  {}".format(val_acc / epoch))

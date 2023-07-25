@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+import tensorlayerx.vision.transforms.functional as F
 
 
 class Gather(object):
@@ -90,8 +91,7 @@ class GenerateTarget(object):
         return keypoints_3d, keypoints_3d_exist
 
     def _generate_target(self, keypoints_3d, keypoints_3d_exist):
-        target_weight = np.ones((self.num_of_joints, 1), dtype=np.float32)
-        target_weight[:, 0] = keypoints_3d_exist[:, 0]
+        target_weight = keypoints_3d_exist[:, 0].astype(np.float32)
 
         target = np.zeros((self.num_of_joints, self.heatmap_size[0], self.heatmap_size[1]),
                           dtype=np.float32)
@@ -129,5 +129,19 @@ class GenerateTarget(object):
         image, label = data
         keypoints_3d, keypoints_3d_exist = self._get_keypoints_3d(label)
         target, target_weight = self._generate_target(keypoints_3d, keypoints_3d_exist)
+        label = target, target_weight
+        return image, label
+
+
+class ToTensor(object):
+    def __init__(self, data_format='HWC'):
+        if not data_format in ['CHW', 'HWC']:
+            raise ValueError('data_format should be CHW or HWC. Got {}'.format(data_format))
+        self.data_format = data_format
+
+    def __call__(self, data):
+        image, (target, target_weight) = data
+        image = F.to_tensor(image, self.data_format)
+        target = F.to_tensor(target, self.data_format)
         label = target, target_weight
         return image, label

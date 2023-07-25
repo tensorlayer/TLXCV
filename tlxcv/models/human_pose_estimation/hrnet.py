@@ -4,22 +4,30 @@ import numpy as np
 
 
 class BasicBlock(Module):
-    def __init__(self, filter_num, stride=1, name=""):
+    def __init__(self, filter_num, stride=1, name="",
+                 data_format='channels_last',
+                 ):
         super(BasicBlock, self).__init__()
         self.conv1 = tlx.nn.layers.Conv2d(out_channels=filter_num,
                                           kernel_size=(3, 3),
                                           stride=(stride, stride),
                                           padding="same",
                                           in_channels=filter_num,
+                                          data_format=data_format,
                                           )
-        self.bn1 = tlx.nn.BatchNorm(num_features=filter_num, momentum=0.1, epsilon=1e-5)
+        self.bn1 = tlx.nn.BatchNorm(num_features=filter_num, momentum=0.1, epsilon=1e-5,
+                                    data_format=data_format,
+                                    )
         self.conv2 = tlx.nn.layers.Conv2d(out_channels=filter_num,
                                           kernel_size=(3, 3),
                                           stride=(1, 1),
                                           padding="same",
                                           in_channels=filter_num,
+                                          data_format=data_format,
                                           )
-        self.bn2 = tlx.nn.BatchNorm(num_features=filter_num, momentum=0.1, epsilon=1e-5)
+        self.bn2 = tlx.nn.BatchNorm(num_features=filter_num, momentum=0.1, epsilon=1e-5,
+                                    data_format=data_format,
+                                    )
 
         if stride != 1:
             downsample = [tlx.nn.layers.Conv2d(out_channels=filter_num,
@@ -27,8 +35,11 @@ class BasicBlock(Module):
                                                stride=(stride, stride),
                                                padding="same",
                                                in_channels=filter_num,
+                                               data_format=data_format,
                                                ),
-                          tlx.nn.BatchNorm(num_features=filter_num, momentum=0.1, epsilon=1e-5)
+                          tlx.nn.BatchNorm(num_features=filter_num, momentum=0.1, epsilon=1e-5,
+                                           data_format=data_format,
+                                           )
                           ]
             self.downsample = tlx.nn.core.Sequential(downsample)
         else:
@@ -39,7 +50,6 @@ class BasicBlock(Module):
         self.stride = stride
 
     def forward(self, inputs):
-
         residual = self.downsample(inputs)
 
         conv1 = self.conv1(inputs)
@@ -49,12 +59,13 @@ class BasicBlock(Module):
         bn2 = self.bn2(conv2)
 
         output = self.relu(tlx.add(residual, bn2))
-
         return output
 
 
 class BottleNeck(Module):
-    def __init__(self, in_filter_num, stride=1, name=""):
+    def __init__(self, in_filter_num, stride=1, name="",
+                 data_format='channels_last',
+                 ):
         super(BottleNeck, self).__init__()
         filter_num = 64
         self.conv1 = tlx.nn.layers.Conv2d(out_channels=filter_num,
@@ -63,24 +74,33 @@ class BottleNeck(Module):
                                           padding="same",
                                           b_init=None,
                                           in_channels=in_filter_num,
+                                          data_format=data_format,
                                           )
-        self.bn1 = tlx.nn.BatchNorm(num_features=filter_num, momentum=0.1, epsilon=1e-5)
+        self.bn1 = tlx.nn.BatchNorm(num_features=filter_num, momentum=0.1, epsilon=1e-5,
+                                    data_format=data_format,
+                                    )
         self.conv2 = tlx.nn.layers.Conv2d(out_channels=filter_num,
                                           kernel_size=(3, 3),
                                           stride=(stride, stride),
                                           padding="same",
                                           b_init=None,
                                           in_channels=filter_num,
+                                          data_format=data_format,
                                           )
-        self.bn2 = tlx.nn.BatchNorm(num_features=filter_num, momentum=0.1, epsilon=1e-5)
+        self.bn2 = tlx.nn.BatchNorm(num_features=filter_num, momentum=0.1, epsilon=1e-5,
+                                    data_format=data_format,
+                                    )
         self.conv3 = tlx.nn.layers.Conv2d(out_channels=filter_num * 4,
                                           kernel_size=(1, 1),
                                           stride=(1, 1),
                                           padding="same",
                                           b_init=None,
                                           in_channels=filter_num,
+                                          data_format=data_format,
                                           )
-        self.bn3 = tlx.nn.BatchNorm(num_features=filter_num * 4, momentum=0.1, epsilon=1e-5)
+        self.bn3 = tlx.nn.BatchNorm(num_features=filter_num * 4, momentum=0.1, epsilon=1e-5,
+                                    data_format=data_format,
+                                    )
 
         downsample = [tlx.nn.layers.Conv2d(out_channels=filter_num * 4,
                                            kernel_size=(1, 1),
@@ -88,8 +108,11 @@ class BottleNeck(Module):
                                            padding="same",
                                            b_init=None,
                                            in_channels=in_filter_num,
+                                           data_format=data_format,
                                            ),
-                      tlx.nn.BatchNorm(num_features=filter_num * 4, momentum=0.1, epsilon=1e-5)
+                      tlx.nn.BatchNorm(num_features=filter_num * 4, momentum=0.1, epsilon=1e-5,
+                                       data_format=data_format,
+                                       )
                       ]
         self.downsample = tlx.nn.core.Sequential(downsample)
         self.relu = tlx.nn.ReLU()
@@ -110,21 +133,21 @@ class BottleNeck(Module):
         return output
 
 
-def make_basic_layer(filter_num, blocks, stride=1):
-    res_block = [BasicBlock(filter_num, stride=stride)]
-
-    for _ in range(1, blocks):
-        res_block.append(BasicBlock(filter_num, stride=1))
-
+def make_basic_layer(filter_num, blocks, stride=1,
+                     data_format='channels_last',
+                     ):
+    res_block = [BasicBlock(filter_num, stride=stride, data_format=data_format,)]
+    res_block += [BasicBlock(filter_num, stride=1, data_format=data_format,)
+                  for _ in range(1, blocks)]
     return tlx.nn.Sequential(res_block)
 
 
-def make_bottleneck_layer(filter_num, blocks, stride=1):
-    res_block = [BottleNeck(filter_num, stride=stride)]
-
-    for _ in range(1, blocks):
-        res_block.append(BottleNeck(256, stride=1))
-
+def make_bottleneck_layer(filter_num, blocks, stride=1,
+                          data_format='channels_last',
+                          ):
+    res_block = [BottleNeck(filter_num, stride=stride, data_format=data_format,)]
+    res_block += [BottleNeck(256, stride=1, data_format=data_format,)
+                  for _ in range(1, blocks)]
     return tlx.nn.Sequential(res_block)
 
 
@@ -135,32 +158,37 @@ class NoneModule(Module):
 
 class HighResolutionModule(Module):
     def __init__(self, num_branches, num_in_channels, num_channels, block, num_blocks, fusion_method,
-                 multi_scale_output=True, name=""):
+                 multi_scale_output=True, name="",
+                 data_format='channels_last',
+                 ):
         super(HighResolutionModule, self).__init__(name=name)
         self.num_branches = num_branches
         self.num_in_channels = num_in_channels
         self.fusion_method = fusion_method
         self.multi_scale_output = multi_scale_output
-        self.branches = tlx.nn.ModuleList(self.__make_branches(num_channels, block, num_blocks))
-        self.fusion_layer = tlx.nn.ModuleList(self.__make_fusion_layers())
+        self.branches = tlx.nn.ModuleList(self.__make_branches(num_channels, block, num_blocks, data_format=data_format))
+        self.fusion_layer = tlx.nn.ModuleList(self.__make_fusion_layers(data_format=data_format))
         self.relu = tlx.nn.ReLU()
 
     def get_output_channels(self):
         return self.num_in_channels
 
-    def __make_branches(self, num_channels, block, num_blocks):
+    def __make_branches(self, num_channels, block, num_blocks,
+                 data_format='channels_last',
+                        ):
         def __make_one_branch(block, num_blocks, num_channels, stride=1):
             if block == "BASIC":
-                return make_basic_layer(filter_num=num_channels, blocks=num_blocks, stride=stride)
+                return make_basic_layer(filter_num=num_channels, blocks=num_blocks, stride=stride, data_format=data_format)
             elif block == "BOTTLENECK":
-                return make_bottleneck_layer(filter_num=num_channels, blocks=num_blocks, stride=stride)
+                return make_bottleneck_layer(filter_num=num_channels, blocks=num_blocks, stride=stride, data_format=data_format)
 
-        branch_layers = []
-        for i in range(self.num_branches):
-            branch_layers.append(__make_one_branch(block, num_blocks[i], num_channels[i]))
+        branch_layers = [
+            __make_one_branch(block, num_blocks[i], num_channels[i])
+            for i in range(self.num_branches)
+        ]
         return branch_layers
 
-    def __make_fusion_layers(self):
+    def __make_fusion_layers(self,data_format='channels_last'):
         if self.num_branches == 1:
             return None
 
@@ -177,10 +205,10 @@ class HighResolutionModule(Module):
                                                  padding="same",
                                                  b_init=None,
                                                  in_channels=self.num_in_channels[j],
+                                                 data_format=data_format
                                                  ),
-                            tlx.nn.BatchNorm(num_features=self.num_in_channels[i], momentum=0.1, epsilon=1e-5),
-                            tlx.nn.UpSampling2d(scale=(2 ** (j - i), 2 ** (j - i))),
-                            # tf.keras.layers.UpSampling2D(size=2**(j-i))
+                            tlx.nn.BatchNorm(num_features=self.num_in_channels[i], momentum=0.1, epsilon=1e-5, data_format=data_format),
+                            tlx.nn.UpSampling2d(scale=(2 ** (j - i), 2 ** (j - i)), data_format=data_format),
                         ])
                     )
                 elif j == i:
@@ -197,9 +225,10 @@ class HighResolutionModule(Module):
                                                          stride=(2, 2),
                                                          padding="same",
                                                          b_init=None,
-                                                         in_channels=self.num_in_channels[j]
+                                                         in_channels=self.num_in_channels[j],
+                                                         data_format=data_format
                                                          ),
-                                    tlx.nn.BatchNorm(num_features=downsample_out_channels, momentum=0.1, epsilon=1e-5),
+                                    tlx.nn.BatchNorm(num_features=downsample_out_channels, momentum=0.1, epsilon=1e-5, data_format=data_format),
                                 ])
                             )
                         else:
@@ -211,9 +240,10 @@ class HighResolutionModule(Module):
                                                          stride=(2, 2),
                                                          padding="same",
                                                          b_init=None,
-                                                         in_channels=self.num_in_channels[j]
+                                                         in_channels=self.num_in_channels[j],
+                                                         data_format=data_format
                                                          ),
-                                    tlx.nn.BatchNorm(num_features=downsample_out_channels, momentum=0.1, epsilon=1e-5),
+                                    tlx.nn.BatchNorm(num_features=downsample_out_channels, momentum=0.1, epsilon=1e-5, data_format=data_format),
                                     tlx.nn.ReLU()
                                 ])
                             )
@@ -291,9 +321,10 @@ class StageParams(object):
 
 
 class PoseHighResolutionNet(Module):
-    def __init__(self, conv3_kernel=3, name=""):
+    def __init__(self, conv3_kernel=3, name="", data_format='channels_last'):
         self.conv3_kernel = conv3_kernel
         self.num_of_joints = 17
+        self.data_format = data_format
         self.SKELETON = [[16, 14], [14, 12], [17, 15], [15, 13], [12, 13], [6, 12], [7, 13], [6, 7], [6, 8], [7, 9],
                          [8, 10], [9, 11], [2, 3], [1, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7]]
 
@@ -309,8 +340,9 @@ class PoseHighResolutionNet(Module):
                                           padding="same",
                                           b_init=None,
                                           in_channels=3,
+                                          data_format=data_format,
                                           )
-        self.bn1 = tlx.nn.BatchNorm(num_features=64, momentum=0.1, epsilon=1e-5)
+        self.bn1 = tlx.nn.BatchNorm(num_features=64, momentum=0.1, epsilon=1e-5, data_format=data_format)
 
         self.conv2 = tlx.nn.layers.Conv2d(out_channels=64,
                                           kernel_size=(3, 3),
@@ -318,33 +350,41 @@ class PoseHighResolutionNet(Module):
                                           padding="same",
                                           b_init=None,
                                           in_channels=64,
+                                          data_format=data_format,
                                           )
-        self.bn2 = tlx.nn.BatchNorm(num_features=64, momentum=0.1, epsilon=1e-5)
-        self.layer1 = make_bottleneck_layer(filter_num=64, blocks=4)
+        self.bn2 = tlx.nn.BatchNorm(num_features=64, momentum=0.1, epsilon=1e-5, data_format=data_format)
+        self.layer1 = make_bottleneck_layer(filter_num=64, blocks=4, data_format=data_format)
         self.transition1 = self.__make_transition_layer(previous_branches_num=1,
-                                                        previous_channels=[256],
+                                                        previous_channels=[
+                                                            256],
                                                         current_branches_num=self.stage_2.get_branch_num(),
-                                                        current_channels=self.stage_2.get_stage_channels())
-        self.stage2 = self.__make_stages(self.stage_2, self.stage_2.get_stage_channels())
+                                                        current_channels=self.stage_2.get_stage_channels(),
+                                                        data_format=data_format)
+        self.stage2 = self.__make_stages(self.stage_2, self.stage_2.get_stage_channels(), data_format=data_format)
         self.transition2 = self.__make_transition_layer(previous_branches_num=self.stage_2.get_branch_num(),
                                                         previous_channels=self.stage_2.get_stage_channels(),
                                                         current_branches_num=self.stage_3.get_branch_num(),
-                                                        current_channels=self.stage_3.get_stage_channels())
-        self.stage3 = self.__make_stages(self.stage_3, self.stage_3.get_stage_channels())
+                                                        current_channels=self.stage_3.get_stage_channels(),
+                                                        data_format=data_format)
+        self.stage3 = self.__make_stages(self.stage_3, self.stage_3.get_stage_channels(), data_format=data_format)
         self.transition3 = self.__make_transition_layer(previous_branches_num=self.stage_3.get_branch_num(),
                                                         previous_channels=self.stage_3.get_stage_channels(),
                                                         current_branches_num=self.stage_4.get_branch_num(),
-                                                        current_channels=self.stage_4.get_stage_channels())
-        self.stage4 = self.__make_stages(self.stage_4, self.stage_4.get_stage_channels(), False)
+                                                        current_channels=self.stage_4.get_stage_channels(),
+                                                        data_format=data_format)
+        self.stage4 = self.__make_stages(self.stage_4, self.stage_4.get_stage_channels(), False, data_format=data_format)
         self.conv3 = tlx.nn.layers.Conv2d(out_channels=self.num_of_joints,
                                           kernel_size=(self.conv3_kernel, self.conv3_kernel),
                                           stride=(1, 1),
                                           padding="same",
                                           in_channels=self.stage_4.get_stage_channels()[0],
+                                          data_format=data_format
                                           )
         self.relu = tlx.nn.ReLU()
 
-    def __make_stages(self, stage, in_channels, multi_scale_output=True):
+    def __make_stages(self, stage, in_channels, multi_scale_output=True,
+                      data_format='channels_last',
+                      ):
         channels = stage.get_stage_channels()
         num_branches = stage.get_branch_num()
         num_modules = stage.get_modules()
@@ -364,11 +404,15 @@ class PoseHighResolutionNet(Module):
                                                     block=block,
                                                     num_blocks=num_blocks,
                                                     fusion_method=fusion_method,
-                                                    multi_scale_output=reset_multi_scale_output))
+                                                    multi_scale_output=reset_multi_scale_output,
+                                                    data_format=data_format
+                                                    ))
         return StackLayers(layers=module_list)
 
     @staticmethod
-    def __make_transition_layer(previous_branches_num, previous_channels, current_branches_num, current_channels):
+    def __make_transition_layer(previous_branches_num, previous_channels, current_branches_num, current_channels,
+                                data_format='channels_last',
+                                ):
         transition_layers = []
         for i in range(current_branches_num):
             if i < previous_branches_num:
@@ -380,9 +424,12 @@ class PoseHighResolutionNet(Module):
                                                  stride=(1, 1),
                                                  padding="same",
                                                  b_init=None,
-                                                 in_channels=previous_channels[i]
+                                                 in_channels=previous_channels[i],
+                                                 data_format=data_format
                                                  ),
-                            tlx.nn.BatchNorm(num_features=current_channels[i], momentum=0.1, epsilon=1e-5),
+                            tlx.nn.BatchNorm(num_features=current_channels[i], momentum=0.1, epsilon=1e-5,
+                                             data_format=data_format
+                                             ),
                             tlx.nn.ReLU()
                         ])
                     )
@@ -401,8 +448,11 @@ class PoseHighResolutionNet(Module):
                                                  padding="same",
                                                  b_init=None,
                                                  in_channels=in_channels,
+                                                 data_format=data_format
                                                  ),
-                            tlx.nn.BatchNorm(num_features=out_channels, momentum=0.1, epsilon=1e-5),
+                            tlx.nn.BatchNorm(num_features=out_channels, momentum=0.1, epsilon=1e-5,
+                                             data_format=data_format
+                                             ),
                             tlx.nn.ReLU()
                         ])
                     )
@@ -411,20 +461,17 @@ class PoseHighResolutionNet(Module):
 
     def loss_fn(self, y_pred, target, target_weight):
         mse = tlx.losses.mean_squared_error
-
-        batch_size = y_pred.shape[0]
-        num_of_joints = y_pred.shape[-1]
-
-        pred = tlx.reshape(tensor=y_pred, shape=(batch_size, -1, num_of_joints))
-        gt = tlx.reshape(tensor=target, shape=(batch_size, -1, num_of_joints))
-
-        loss = 0
-        for i in range(num_of_joints):
-            heatmap_pred = pred[:, :, i]
-            heatmap_gt = gt[:, :, i]
-            loss += 0.5 * mse(target=heatmap_pred * target_weight[:, i],
-                              output=heatmap_gt * target_weight[:, i])
-        bloss = loss / num_of_joints
+        if target.shape != target_weight.shape:
+            if self.data_format == 'channels_last':
+                equation = 'nhwc,nc->nhwc'
+            else:
+                equation = 'nchw,nc->nchw'
+            y_pred = tlx.einsum(equation, y_pred, target_weight)
+            target = tlx.einsum(equation, target, target_weight)
+        else:
+            y_pred = y_pred * target_weight
+            target = target * target_weight
+        bloss = mse(y_pred, target)
         return bloss
 
     def forward(self, inputs):
