@@ -28,8 +28,8 @@ if __name__ == '__main__':
 
     path = "./demo/human_pose_estimation/hrnet.jpg"
     image = load_image(path)
-    image_height, image_width = image.shape[:2]
-    
+    height, width = image.shape[:2]
+
     transform = Compose([
         Resize((256, 256)),
         Normalize(mean=(0, 0, 0), std=(255.0, 255.0, 255.0)),
@@ -38,5 +38,11 @@ if __name__ == '__main__':
     image_tensor = transform(image)
     image_tensor = tlx.expand_dims(image_tensor, 0)
 
-    image = inference(image_tensor=image_tensor, model=model, image=image, original_image_size=[image_height, image_width], data_format=data_format)
+    image = inference(
+        image_tensor=image_tensor,
+        model=model,
+        image=image,
+        original_image_size=[height, width],
+        data_format=data_format
+    )
     save_image(image, 'result.jpg', './demo/human_pose_estimation/')

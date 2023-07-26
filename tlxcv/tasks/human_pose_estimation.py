@@ -2,7 +2,6 @@ import contextlib
 import copy
 import os
 import time
-# from tlxcv.models import *
 from typing import Callable
 
 import cv2
@@ -14,8 +13,8 @@ from tensorlayerx.optimizers.lr import LRScheduler
 
 
 class HumanPoseEstimation(tlx.nn.Module):
-    def __init__(self, backbone, **kwargs):
-        super(HumanPoseEstimation, self).__init__()
+    def __init__(self, backbone):
+        super().__init__()
         assert isinstance(backbone, tlx.nn.Module)
         self.backbone = backbone
 
@@ -58,7 +57,13 @@ def color_pool():
 def draw_on_image(image, kpts):
     kpts = kpts.astype(int)
     for x, y in kpts:
-        cv2.circle(img=image, center=(x, y), radius=8, color=get_dye_vat_bgr()["Red"], thickness=2)
+        cv2.circle(
+            img=image,
+            center=(x, y),
+            radius=8,
+            color=get_dye_vat_bgr()["Red"],
+            thickness=2
+        )
 
     # draw lines
     color_list = color_pool()
@@ -67,11 +72,24 @@ def draw_on_image(image, kpts):
     for i, (s1, s2) in enumerate(SKELETON):
         pt1 = kpts[s1 - 1].tolist()
         pt2 = kpts[s2 - 1].tolist()
-        cv2.line(img=image, pt1=pt1, pt2=pt2, color=color_list[i % len(color_list)], thickness=5, lineType=cv2.LINE_AA)
+        cv2.line(
+            img=image,
+            pt1=pt1,
+            pt2=pt2,
+            color=color_list[i % len(color_list)],
+            thickness=5,
+            lineType=cv2.LINE_AA
+        )
     return image
 
 
-def inference(image_tensor, model, image, original_image_size, data_format='channels_last'):
+def inference(
+    image_tensor,
+    model,
+    image,
+    original_image_size,
+    data_format='channels_last'
+):
     assert image_tensor.shape[0] == 1
 
     model.set_eval()
@@ -120,12 +138,13 @@ class PCK(object):
 
         pred, _ = get_max_preds(heatmap)
         target, _ = get_max_preds(target)
-        distance, mask = self.__calculate_distance(pred, target, heat_shape=(h, w))
+        distance, mask = self.__calculate_distance(
+            pred, target, heat_shape=(h, w))
         avg_accuracy = self.__distance_accuracy(distance, mask)
         return avg_accuracy
 
     @staticmethod
-    def __calculate_distance(pred:np.ndarray, target:np.ndarray, heat_shape):
+    def __calculate_distance(pred: np.ndarray, target: np.ndarray, heat_shape):
         pred = pred.astype(np.float32) / heat_shape
         target = target.astype(np.float32) / heat_shape
         distance = np.linalg.norm(pred - target, axis=-1)
@@ -163,7 +182,8 @@ class CocoEvaluator(object):
         # suppress pycocotools prints
         with open(os.devnull, 'w') as devnull:
             with contextlib.redirect_stdout(devnull):
-                coco_dt = COCO.loadRes(self.coco_gt, results) if results else COCO()
+                coco_dt = COCO.loadRes(
+                    self.coco_gt, results) if results else COCO()
 
         self.coco_eval.cocoDt = coco_dt
         self.coco_eval.params.imgIds = list(img_ids)
@@ -205,16 +225,14 @@ class CocoEvaluator(object):
             scores = tlx.convert_to_numpy(prediction["scores"]).tolist()
             labels = tlx.convert_to_numpy(prediction["labels"]).tolist()
 
-            coco_results.extend(
-                [
-                    {
-                        "image_id": original_id,
-                        "category_id": labels[k],
-                        "bbox": box,
-                        "score": scores[k],
-                    } for k, box in enumerate(boxes)
-                ]
-            )
+            coco_results.extend([
+                {
+                    "image_id": original_id,
+                    "category_id": labels[k],
+                    "bbox": box,
+                    "score": scores[k],
+                } for k, box in enumerate(boxes)
+            ])
         return coco_results
 
     def prepare_for_coco_segmentation(self, predictions):
@@ -226,27 +244,24 @@ class CocoEvaluator(object):
 
             masks = prediction["masks"]
             masks = masks > 0.5
-
             scores = prediction["scores"].tolist()
             labels = prediction["labels"].tolist()
-
             rles = [
-                mask_util.encode(np.array(mask, dtype=np.uint8, order="F"))
-                for mask in masks
+                mask_util.encode(
+                    np.array(mask, dtype=np.uint8, order="F")
+                ) for mask in masks
             ]
             for rle in rles:
                 rle["counts"] = rle["counts"].decode("utf-8")
 
-            coco_results.extend(
-                [
-                    {
-                        "image_id": original_id,
-                        "category_id": labels[k],
-                        "segmentation": rle,
-                        "score": scores[k],
-                    } for k, rle in enumerate(rles)
-                ]
-            )
+            coco_results.extend([
+                {
+                    "image_id": original_id,
+                    "category_id": labels[k],
+                    "segmentation": rle,
+                    "score": scores[k],
+                } for k, rle in enumerate(rles)
+            ])
         return coco_results
 
 
@@ -298,7 +313,8 @@ def evaluate(self):
         for imgId in p.imgIds
     ]
     # this is NOT in the pycocotools code, but could be done outside
-    evalImgs = np.asarray(evalImgs).reshape(len(catIds), len(p.areaRng), len(p.imgIds))
+    evalImgs = np.asarray(evalImgs).reshape(
+        len(catIds), len(p.areaRng), len(p.imgIds))
     self._paramsEval = copy.deepcopy(self.params)
     # toc = time.time()
     # print('DONE (t={:0.2f}s).'.format(toc-tic))
@@ -343,7 +359,7 @@ def all_gather(data):
 
 class EpochDecay(LRScheduler):
     def __init__(self, learning_rate, last_epoch=0, verbose=False):
-        super(EpochDecay, self).__init__(learning_rate, last_epoch, verbose)
+        super().__init__(learning_rate, last_epoch, verbose)
 
     def get_lr(self):
         if int(self.last_epoch) >= 65:
@@ -385,7 +401,7 @@ class Trainer(tlx.model.Model):
 
         def _forward_acc(_logits, y_batch):
             target, target_weight = y_batch
-            avg_accuracy= self.pck(network_output=_logits, target=target)
+            avg_accuracy = self.pck(network_output=_logits, target=target)
             return avg_accuracy
 
         train_frame(
@@ -433,20 +449,23 @@ def train_frame(
     bp_output_callback: Callable, fp_output_callback: Callable, forward_callback: Callable
 ):
     with Progress(TextColumn("[progress.description]{task.description}"),
-                    BarColumn(),
-                    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                    MofNCompleteColumn(),
-                    TimeRemainingColumn(),
-                    TimeElapsedColumn()) as progress:
+                  BarColumn(),
+                  TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                  MofNCompleteColumn(),
+                  TimeRemainingColumn(),
+                  TimeElapsedColumn()) as progress:
 
         train_num = len(train_dataset)
-        epoch_tqdm = progress.add_task(description="[red]Epoch progress", total=n_epoch)
-        batch_tqdm = progress.add_task(description="[green]Batch(train)", total=train_num)
+        epoch_tqdm = progress.add_task(
+            description="[red]Epoch progress", total=n_epoch)
+        batch_tqdm = progress.add_task(
+            description="[green]Batch(train)", total=train_num)
         for epoch in range(1, n_epoch+1):
             start_time = time.time()
 
             train_loss, train_acc = 0, 0
-            progress.reset(batch_tqdm, description="[green]Batch(train)", total=train_num)
+            progress.reset(
+                batch_tqdm, description="[green]Batch(train)", total=train_num)
             for batch, (X_batch, y_batch) in enumerate(train_dataset, start=1):
                 network.set_train()
                 output, loss = bp_output_callback(X_batch, y_batch, train_weights,
@@ -461,15 +480,15 @@ def train_frame(
                     train_acc += forward_callback(output, y_batch)
 
                 if print_train_batch:
-                    print("Epoch {} of {} took {}".format(epoch, n_epoch, time.time() - start_time))
-                    print("   train loss: {}".format(train_loss / batch))
-                    print("   train acc:  {}".format(train_acc / batch))
+                    print(f"Epoch {epoch} of {n_epoch} took {time.time() - start_time}")
+                    print(f"   train loss: {train_loss / batch}")
+                    print(f"   train acc:  {train_acc / batch}")
                 progress.advance(batch_tqdm, advance=1)
 
             if epoch == 1 or epoch % print_freq == 0:
-                print("Epoch {} of {} took {}".format(epoch, n_epoch, time.time() - start_time))
-                print("   train loss: {}".format(train_loss / train_num))
-                print("   train acc:  {}".format(train_acc / train_num))
+                print(f"Epoch {epoch} of {n_epoch} took {time.time() - start_time}")
+                print(f"   train loss: {train_loss / batch}")
+                print(f"   train acc:  {train_acc / batch}")
 
             if test_dataset:
                 # use training and evaluation sets to evaluate the model every print_freq epoch
@@ -478,9 +497,11 @@ def train_frame(
 
                     network.set_eval()
                     val_loss, val_acc = 0, 0
-                    progress.reset(batch_tqdm, description="[green]Batch(eval )", total=eval_num)
+                    progress.reset(
+                        batch_tqdm, description="[green]Batch(eval )", total=eval_num)
                     for batch, (X_batch, y_batch) in enumerate(test_dataset, start=1):
-                        _logits, loss = fp_output_callback(X_batch, y_batch, network, loss_fn)
+                        _logits, loss = fp_output_callback(
+                            X_batch, y_batch, network, loss_fn)
                         val_loss += loss
                         if metrics:
                             metrics.update(_logits, y_batch)
@@ -489,6 +510,6 @@ def train_frame(
                         else:
                             val_acc += forward_callback(_logits, y_batch)
                         progress.advance(batch_tqdm, advance=1)
-                    print("   val loss: {}".format(val_loss / epoch))
-                    print("   val acc:  {}".format(val_acc / epoch))
+                    print(f"   val loss: {val_loss / epoch}")
+                    print(f"   val acc:  {val_acc / epoch}")
             progress.advance(epoch_tqdm, advance=1)

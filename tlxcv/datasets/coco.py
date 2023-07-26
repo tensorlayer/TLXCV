@@ -13,7 +13,7 @@ class CocoData(VisionDataset):
         self,
         root: str,
         ann_file: str,
-        image_format='pil',
+        image_format: str = 'pil',
         transforms: Optional[Callable] = None,
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None
@@ -48,13 +48,14 @@ class CocoDetection(CocoData):
     def __init__(
         self,
         root: str,
-        split='train',
+        split: str = 'train',
         *args, **kwargs
     ) -> None:
         if split == 'train':
-            ann_file = os.path.join(root, 'annotations/instances_train2017.json')
+            ann_name = 'annotations/instances_train2017.json'
         else:
-            ann_file = os.path.join(root, 'annotations/instances_val2017.json')
+            ann_name = 'annotations/instances_val2017.json'
+        ann_file = os.path.join(root, ann_name)
         super().__init__(root, ann_file, *args, **kwargs)
 
     def load_ids(self):
@@ -62,7 +63,8 @@ class CocoDetection(CocoData):
         new_ids = []
         for id in ids:
             target = self._load_target(id)
-            anno = [obj for obj in target if "iscrowd" not in obj or obj["iscrowd"] == 0]
+            anno = [
+                obj for obj in target if "iscrowd" not in obj or obj["iscrowd"] == 0]
             if len(anno) == 0:
                 continue
             new_ids.append(id)
@@ -89,14 +91,14 @@ class CocoHumanPoseEstimation(CocoData):
     def __init__(
         self,
         root: str,
-        split='train',
-        image_format='pil',
+        split: str='train',
         *args, **kwargs
     ) -> None:
         if split == 'train':
-            ann_file = os.path.join(root, 'annotations/person_keypoints_train2017.json')
+            ann_name = 'annotations/person_keypoints_train2017.json'
         else:
-            ann_file = os.path.join(root, 'annotations/person_keypoints_val2017.json')
+            ann_name = 'annotations/person_keypoints_val2017.json'
+        ann_file = os.path.join(root, ann_name)
         super().__init__(root, ann_file, *args, **kwargs)
 
     def load_ids(self):
@@ -112,13 +114,16 @@ class CocoHumanPoseEstimation(CocoData):
                 if sum(keypoints) == 0:
                     continue
                 new_ids.append((id, index))
+        # just for test
+        # new_ids = new_ids[:100]
         return new_ids
 
     def __getitem__(self, index: int):
         id, index = self.ids[index]
         image = self._load_image(id)
         target = self._load_target(id)[index]
-        text = os.path.join(self.root, self.data_type, self.coco.loadImgs(id)[0]["file_name"]) + " "
+        text = os.path.join(self.root, self.data_type,
+                            self.coco.loadImgs(id)[0]["file_name"]) + " "
         text += str(image.height) + " "
         text += str(image.width) + " "
         text += " ".join(map(str, target["bbox"])) + " "
