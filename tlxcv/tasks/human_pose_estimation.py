@@ -388,10 +388,94 @@ class EpochDecay(LRScheduler):
         return self.base_lr
 
 
+
+def get_lr(optimizer):
+    try:
+        return optimizer.lr().numpy()
+    except:
+        return optimizer.lr().cpu().numpy()
+
+
 class Trainer(tlx.model.Model):
     def __init__(self, *args, data_format="channels_last", **kwargs):
         super().__init__(*args, **kwargs)
         self.pck = PCK(data_format=data_format)
+        self.train_arch = self.train_progress_arch
+
+    def train_progress_arch(
+        self,
+        n_epoch,
+        train_dataset,
+        network,
+        loss_fn,
+        optimizer,
+        print_train_batch,
+        print_freq,
+        test_dataset,
+        batch_train: Callable,
+        batch_eval: Callable,
+    ):
+        with Progress(
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            MofNCompleteColumn(),
+            TimeRemainingColumn(),
+            TimeElapsedColumn(),
+        ) as progress:
+            train_num = len(train_dataset)
+            epoch_tqdm = progress.add_task(description="[red]Epoch progress", total=n_epoch)
+            batch_tqdm = progress.add_task(description="[green]Batch(train)", total=train_num)
+            for epoch in range(1, n_epoch + 1):
+                start_time = time.time()
+
+                network.set_train()
+                train_loss, train_acc = 0, 0
+                progress.reset(
+                    batch_tqdm, description="[green]Batch(train)", total=train_num)
+                for batch, batch_data in enumerate(train_dataset, start=1):
+                    loss, avg_accuracy = batch_train(network, batch_data, loss_fn, optimizer)
+                    train_loss += loss
+                    train_acc += avg_accuracy
+                    if print_train_batch:
+                        print(
+                            "Epoch {} of {} {} took {}".format(
+                                epoch, n_epoch, batch, time.time() - start_time
+                            )
+                        )
+                        print("   train loss: {}".format(train_loss / batch))
+                        print("   train acc: {}".format(train_acc / batch))
+                        print("   learning rate: ", get_lr(optimizer))
+                    progress.advance(batch_tqdm, advance=1)
+
+                if epoch == 1 or epoch % print_freq == 0:
+                    print(
+                        "Epoch {} of {} took {}".format(
+                            epoch, n_epoch, time.time() - start_time
+                        )
+                    )
+                    print("   train loss: {}".format(train_loss / batch))
+                    print("   train acc: {}".format(train_acc / batch))
+
+                if test_dataset:
+                    # use training and evaluation sets to evaluate the model every print_freq epoch
+                    if epoch == 1 or epoch % print_freq == 0:
+                        eval_num = len(test_dataset)
+
+                        network.set_eval()
+                        val_loss, val_acc = 0, 0
+                        progress.reset(
+                            batch_tqdm, description="[green]Batch(eval )", total=eval_num
+                        )
+                        for batch, batch_data in enumerate(test_dataset, start=1):
+                            loss, avg_accuracy = batch_eval(network, batch_data, loss_fn)
+                            val_loss += loss
+                            val_acc += avg_accuracy
+                            progress.advance(batch_tqdm, advance=1)
+                    print("   val loss: {}".format(val_loss / batch))
+                    print("   val acc: {}".format(val_acc / batch))
+                optimizer.lr.step()
+                progress.advance(epoch_tqdm, advance=1)
 
     def tf_train(
         self,
@@ -408,43 +492,35 @@ class Trainer(tlx.model.Model):
     ):
         import tensorflow as tf
 
-        def _bp_output_loss(
-            X_batch, y_batch, trainable_params, network, loss_fn, optimizer
-        ):
-            target, target_weight = y_batch
+        def batch_train(network, batch_data, loss_fn, optimizer):
+            inputs, (targets, target_weights) = batch_data
             with tf.GradientTape() as tape:
-                _logits = network(X_batch)
-                _loss = loss_fn(_logits, target, target_weight=target_weight)
+                logits = network(inputs)
+                loss = loss_fn(logits, targets, target_weight=target_weights)
 
-            grad = tape.gradient(_loss, trainable_params)
-            optimizer.apply_gradients(zip(grad, trainable_params))
-            return _logits, _loss
+            grad = tape.gradient(loss, train_weights)
+            optimizer.apply_gradients(zip(grad, train_weights))
+            avg_accuracy = self.pck(network_output=logits, target=targets)
+            return loss, avg_accuracy
 
-        def _fp_output_loss(X_batch, y_batch, network, loss_fn):
-            target, target_weight = y_batch
-            _logits = network(X_batch)
-            _loss = loss_fn(_logits, target, target_weight=target_weight)
-            return _logits, _loss
+        def batch_eval(network, batch_data, loss_fn):
+            inputs, (targets, target_weights) = batch_data
+            logits = network(inputs)
+            loss = loss_fn(logits, targets, target_weight=target_weights)
+            avg_accuracy = self.pck(network_output=logits, target=targets)
+            return loss, avg_accuracy
 
-        def _forward_acc(_logits, y_batch):
-            target, target_weight = y_batch
-            avg_accuracy = self.pck(network_output=_logits, target=target)
-            return avg_accuracy
-
-        train_frame(
+        self.train_arch(
             n_epoch,
             train_dataset,
             network,
             loss_fn,
-            train_weights,
             optimizer,
-            metrics,
             print_train_batch,
             print_freq,
             test_dataset,
-            bp_output_callback=_bp_output_loss,
-            fp_output_callback=_fp_output_loss,
-            forward_callback=_forward_acc,
+            batch_train,
+            batch_eval,
         )
 
     def th_train(
@@ -460,123 +536,31 @@ class Trainer(tlx.model.Model):
         print_freq,
         test_dataset,
     ):
-        def _bp_output_loss(
-            X_batch, y_batch, trainable_params, network, loss_fn, optimizer
-        ):
-            target, target_weight = y_batch
-            _logits = network(X_batch)
-            _loss = loss_fn(_logits, target, target_weight=target_weight)
-            grads = optimizer.gradient(_loss, trainable_params)
-            optimizer.apply_gradients(zip(grads, trainable_params))
-            return _logits, _loss.item()
+        def batch_train(network, batch_data, loss_fn, optimizer):
+            inputs, (targets, target_weights) = batch_data
+            logits = network(inputs)
+            loss = loss_fn(logits, targets, target_weight=target_weights)
+            grads = optimizer.gradient(loss, train_weights)
+            optimizer.apply_gradients(zip(grads, train_weights))
+            avg_accuracy = self.pck(network_output=logits, target=targets)
+            return loss.item(), avg_accuracy
 
-        def _fp_output_loss(X_batch, y_batch, network, loss_fn):
-            target, target_weight = y_batch
-            _logits = network(X_batch)
-            _loss = loss_fn(_logits, target, target_weight=target_weight)
-            return _logits, _loss.item()
+        def batch_eval(network, batch_data, loss_fn):
+            inputs, (targets, target_weights) = batch_data
+            logits = network(inputs)
+            loss = loss_fn(logits, targets, target_weight=target_weights)
+            avg_accuracy = self.pck(network_output=logits, target=targets)
+            return loss.item(), avg_accuracy
 
-        def _forward_acc(_logits, y_batch):
-            target, target_weight = y_batch
-            avg_accuracy = self.pck(network_output=_logits, target=target)
-            return avg_accuracy
-
-        train_frame(
+        self.train_arch(
             n_epoch,
             train_dataset,
             network,
             loss_fn,
-            train_weights,
             optimizer,
-            metrics,
             print_train_batch,
             print_freq,
             test_dataset,
-            bp_output_callback=_bp_output_loss,
-            fp_output_callback=_fp_output_loss,
-            forward_callback=_forward_acc,
+            batch_train,
+            batch_eval,
         )
-
-
-def train_frame(
-    n_epoch,
-    train_dataset,
-    network,
-    loss_fn,
-    train_weights,
-    optimizer,
-    metrics,
-    print_train_batch,
-    print_freq,
-    test_dataset,
-    bp_output_callback: Callable,
-    fp_output_callback: Callable,
-    forward_callback: Callable,
-):
-    with Progress(
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        MofNCompleteColumn(),
-        TimeRemainingColumn(),
-        TimeElapsedColumn(),
-    ) as progress:
-        train_num = len(train_dataset)
-        epoch_tqdm = progress.add_task(description="[red]Epoch progress", total=n_epoch)
-        batch_tqdm = progress.add_task(description="[green]Batch(train)", total=train_num)
-        for epoch in range(1, n_epoch + 1):
-            start_time = time.time()
-
-            train_loss, train_acc = 0, 0
-            progress.reset(
-                batch_tqdm, description="[green]Batch(train)", total=train_num)
-            for batch, (X_batch, y_batch) in enumerate(train_dataset, start=1):
-                network.set_train()
-                output, loss = bp_output_callback(
-                    X_batch, y_batch, train_weights, network, loss_fn, optimizer
-                )
-                train_loss += loss
-
-                if metrics:
-                    metrics.update(output, y_batch)
-                    train_acc += metrics.result()
-                    metrics.reset()
-                else:
-                    train_acc += forward_callback(output, y_batch)
-
-                if print_train_batch:
-                    print(f"Epoch {epoch} of {n_epoch} took {time.time() - start_time}")
-                    print(f"   train loss: {train_loss / batch}")
-                    print(f"   train acc:  {train_acc / batch}")
-                progress.advance(batch_tqdm, advance=1)
-
-            if epoch == 1 or epoch % print_freq == 0:
-                print(f"Epoch {epoch} of {n_epoch} took {time.time() - start_time}")
-                print(f"   train loss: {train_loss / batch}")
-                print(f"   train acc:  {train_acc / batch}")
-
-            if test_dataset:
-                # use training and evaluation sets to evaluate the model every print_freq epoch
-                if epoch == 1 or epoch % print_freq == 0:
-                    eval_num = len(test_dataset)
-
-                    network.set_eval()
-                    val_loss, val_acc = 0, 0
-                    progress.reset(
-                        batch_tqdm, description="[green]Batch(eval )", total=eval_num
-                    )
-                    for batch, (X_batch, y_batch) in enumerate(test_dataset, start=1):
-                        _logits, loss = fp_output_callback(
-                            X_batch, y_batch, network, loss_fn
-                        )
-                        val_loss += loss
-                        if metrics:
-                            metrics.update(_logits, y_batch)
-                            val_acc += metrics.result()
-                            metrics.reset()
-                        else:
-                            val_acc += forward_callback(_logits, y_batch)
-                        progress.advance(batch_tqdm, advance=1)
-                    print(f"   val loss: {val_loss / batch}")
-                    print(f"   val acc:  {val_acc / batch}")
-            progress.advance(epoch_tqdm, advance=1)
