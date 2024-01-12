@@ -1,6 +1,7 @@
-from .trocr_decoder import *
-from .vit import *
 import tensorlayerx as tlx
+
+from .trocr_decoder import TrOCRForCausalLM
+from .vit import ViTModel
 
 
 class TrOCR(tlx.nn.Module):
@@ -42,6 +43,7 @@ class TrOCR(tlx.nn.Module):
         bos_token_id=0,
         eos_token_id=2,
         *inputs,
+        data_format="channels_first",
         **kwargs
     ):
         """
@@ -110,6 +112,7 @@ class TrOCR(tlx.nn.Module):
             layer_norm_eps,
             num_hidden_layers,
             add_pooling_layer=False,
+            data_format=data_format,
         )
 
         self.trocr_decoder = TrOCRForCausalLM(
@@ -160,11 +163,9 @@ class TrOCR(tlx.nn.Module):
         )
         return loss(logits=logits, target_seqs=labels, input_mask=mask)
 
-    def generate_one(self, inputs=None, max_length=64):
-        decoder_start_token_id = self.bos_token_id
-        start_tokens = decoder_start_token_id * tlx.ones(
-            (shape_list(inputs)[0], 1), dtype=tlx.int64
-        )
+    def generate_one(self, inputs, max_length=64):
+        start_tokens = tlx.ones((inputs.shape[0], 1), dtype=tlx.int64)
+        start_tokens *= self.bos_token_id
 
         outputs = self.vit(inputs)
         encoder_hidden_states = outputs[0]

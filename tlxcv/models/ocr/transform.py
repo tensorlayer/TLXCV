@@ -1,8 +1,13 @@
-from PIL import Image
-import PIL.Image
-import numpy as np
-import regex as re
 import json
+import re
+
+import numpy as np
+import PIL.Image
+from PIL import Image
+
+
+def is_nchw(data_format):
+    return data_format in ("NCHW", "channels_first")
 
 
 def get_pairs(word):
@@ -56,6 +61,7 @@ class TrOCRTransform(object):
         do_normalize=True,
         image_mean=None,
         image_std=None,
+        data_format="channels_first",
         **kwargs,
     ):
         self.vocab_file = vocab_file
@@ -74,11 +80,12 @@ class TrOCRTransform(object):
         self.size = size
         self.resample = resample
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else [0.5, 0.5, 0.5]
-        self.image_std = image_std if image_std is not None else [0.5, 0.5, 0.5]
+        self.image_mean = image_mean or [0.5, 0.5, 0.5]
+        self.image_std = image_std or [0.5, 0.5, 0.5]
+        self.data_format = data_format
 
         self.pat = re.compile(
-            r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+            r"""'s|'t|'re|'ve|'m|'ll|'d| ?\\p{L}+| ?\\p{N}+| ?[^\s\\p{L}\\p{N}]+|\s+(?!\S)|\s+"""
         )
         self.cache = {}
 
@@ -252,10 +259,11 @@ class TrOCRTransform(object):
             image = self.normalize(
                 image=image, mean=self.image_mean, std=self.image_std
             )
-
+        if is_nchw(self.data_format):
+            image = image.transpose(2, 0, 1)
         return image
 
-    def to_numpy_array(self, image, rescale=None, channel_first=True):
+    def to_numpy_array(self, image, rescale=None):
         if isinstance(image, Image.Image):
             image = np.array(image)
 
@@ -264,9 +272,6 @@ class TrOCRTransform(object):
 
         if rescale:
             image = image.astype(np.float32) / 255.0
-
-        if channel_first and image.ndim == 3:
-            image = image.transpose(2, 0, 1)
 
         return image
 
@@ -278,15 +283,10 @@ class TrOCRTransform(object):
         if not isinstance(std, np.ndarray):
             std = np.array(std).astype(image.dtype)
 
-        if image.ndim == 3 and image.shape[0] in [1, 3]:
-            return (image - mean[:, None, None]) / std[:, None, None]
-        else:
-            return (image - mean) / std
+        return (image - mean) / std
 
     def __call__(self, image_path, text):
         image = Image.open(image_path).convert("RGB")
         image = self.process_image(image)
-
         labels = self.string_to_ids(text, max_length=self.max_length)
-
         return {"inputs": image}, labels
