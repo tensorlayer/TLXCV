@@ -9,6 +9,8 @@ class ImageClassification(tlx.nn.Module):
         self.backbone = backbone
 
     def loss_fn(self, output: Any, target: Any) -> Any:
+        if tlx.BACKEND == "paddle":
+            target = target.astype('int64')
         loss = tlx.losses.softmax_cross_entropy_with_logits(output, target)
         return loss
 
