@@ -1,2 +1,1 @@
-from .hrnet import *
-from .resnet_vd import *
+from .resnet_vd import ResNet_vd
