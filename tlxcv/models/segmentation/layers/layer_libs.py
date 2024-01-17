@@ -10,7 +10,9 @@ class ConvBNReLU(nn.Module):
         out_channels,
         kernel_size,
         padding="same",
-        dilation=(1, 1),
+        stride=1,
+        groups=1,
+        dilation=1,
         data_format="channels_first",
         **kwargs
     ):
@@ -22,6 +24,8 @@ class ConvBNReLU(nn.Module):
             out_channels=out_channels,
             kernel_size=kernel_size,
             padding=padding,
+            stride=stride,
+            n_group=groups,
             dilation=dilation,
             b_init=b_init,
             data_format=data_format,
