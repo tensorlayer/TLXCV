@@ -181,7 +181,7 @@ class AuxLayer(nn.Module):
             data_format=data_format,
             **kwargs
         )
-        self.dropout = tlx.ops.Dropout(p=dropout_prob)
+        self.dropout = nn.Dropout(p=dropout_prob)
         self.conv = nn.GroupConv2d(
             in_channels=inter_channels,
             out_channels=out_channels,
