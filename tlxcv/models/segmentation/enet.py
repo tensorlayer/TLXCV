@@ -1,17 +1,12 @@
 import tensorlayerx as tlx
-import paddle
-import paddle2tlx
-import tensorlayerx
 import tensorlayerx.nn as nn
-from models import manager
-from models import layers
-__all__ = ['ENet']
+
+__all__ = ["ENet"]
 
 
-@manager.MODELS.add_component
 class ENet(nn.Module):
     """
-    The ENet implementation based on PaddlePaddle.
+    The ENet implementation based on TensorlayerX.
 
     The original article refers to
         Adam Paszke, Abhishek Chaurasia, Sangpil Kim, Eugenio Culurciello, et al."ENet: A Deep Neural Network Architecture for Real-Time Semantic Segmentation"
@@ -26,81 +21,194 @@ class ENet(nn.Module):
             function; otherwise, PReLU is used. Default: True.
     """
 
-    def __init__(self, num_classes, pretrained=None, encoder_relu=False,
-        decoder_relu=True):
-        super(ENet, self).__init__()
+    def __init__(
+        self,
+        num_classes,
+        encoder_relu=False,
+        decoder_relu=True,
+        data_format="channels_first",
+    ):
+        super().__init__()
+        self.data_format = data_format
         self.numclasses = num_classes
-        self.initial_block = InitialBlock(3, 16, relu=encoder_relu)
-        self.downsample1_0 = DownsamplingBottleneck(16, 64, return_indices=\
-            True, dropout_prob=0.01, relu=encoder_relu)
-        self.regular1_1 = RegularBottleneck(64, padding=1, dropout_prob=\
-            0.01, relu=encoder_relu)
-        self.regular1_2 = RegularBottleneck(64, padding=1, dropout_prob=\
-            0.01, relu=encoder_relu)
-        self.regular1_3 = RegularBottleneck(64, padding=1, dropout_prob=\
-            0.01, relu=encoder_relu)
-        self.regular1_4 = RegularBottleneck(64, padding=1, dropout_prob=\
-            0.01, relu=encoder_relu)
-        self.downsample2_0 = DownsamplingBottleneck(64, 128, return_indices
-            =True, dropout_prob=0.1, relu=encoder_relu)
-        self.regular2_1 = RegularBottleneck(128, padding=1, dropout_prob=\
-            0.1, relu=encoder_relu)
-        self.dilated2_2 = RegularBottleneck(128, dilation=2, padding=2,
-            dropout_prob=0.1, relu=encoder_relu)
-        self.asymmetric2_3 = RegularBottleneck(128, kernel_size=5, padding=\
-            2, asymmetric=True, dropout_prob=0.1, relu=encoder_relu)
-        self.dilated2_4 = RegularBottleneck(128, dilation=4, padding=4,
-            dropout_prob=0.1, relu=encoder_relu)
-        self.regular2_5 = RegularBottleneck(128, padding=1, dropout_prob=\
-            0.1, relu=encoder_relu)
-        self.dilated2_6 = RegularBottleneck(128, dilation=8, padding=8,
-            dropout_prob=0.1, relu=encoder_relu)
-        self.asymmetric2_7 = RegularBottleneck(128, kernel_size=5,
-            asymmetric=True, padding=2, dropout_prob=0.1, relu=encoder_relu)
-        self.dilated2_8 = RegularBottleneck(128, dilation=16, padding=16,
-            dropout_prob=0.1, relu=encoder_relu)
-        self.regular3_0 = RegularBottleneck(128, padding=1, dropout_prob=\
-            0.1, relu=encoder_relu)
-        self.dilated3_1 = RegularBottleneck(128, dilation=2, padding=2,
-            dropout_prob=0.1, relu=encoder_relu)
-        self.asymmetric3_2 = RegularBottleneck(128, kernel_size=5, padding=\
-            2, asymmetric=True, dropout_prob=0.1, relu=encoder_relu)
-        self.dilated3_3 = RegularBottleneck(128, dilation=4, padding=4,
-            dropout_prob=0.1, relu=encoder_relu)
-        self.regular3_4 = RegularBottleneck(128, padding=1, dropout_prob=\
-            0.1, relu=encoder_relu)
-        self.dilated3_5 = RegularBottleneck(128, dilation=8, padding=8,
-            dropout_prob=0.1, relu=encoder_relu)
-        self.asymmetric3_6 = RegularBottleneck(128, kernel_size=5,
-            asymmetric=True, padding=2, dropout_prob=0.1, relu=encoder_relu)
-        self.dilated3_7 = RegularBottleneck(128, dilation=16, padding=16,
-            dropout_prob=0.1, relu=encoder_relu)
-        self.upsample4_0 = UpsamplingBottleneck(128, 64, dropout_prob=0.1,
-            relu=decoder_relu)
-        self.regular4_1 = RegularBottleneck(64, padding=1, dropout_prob=0.1,
-            relu=decoder_relu)
-        self.regular4_2 = RegularBottleneck(64, padding=1, dropout_prob=0.1,
-            relu=decoder_relu)
-        self.upsample5_0 = UpsamplingBottleneck(64, 16, dropout_prob=0.1,
-            relu=decoder_relu)
-        self.regular5_1 = RegularBottleneck(16, padding=1, dropout_prob=0.1,
-            relu=decoder_relu)
-        self.transposed_conv = (paddle2tlx.pd2tlx.ops.tlxops.
-            tlx_ConvTranspose2d(in_channels=16, out_channels=num_classes,
-            kernel_size=3, stride=2, padding=1, data_format=\
-            'channels_first', b_init=False))
-        self.pretrained = pretrained
+        self.initial_block = InitialBlock(
+            3, 16, relu=encoder_relu, data_format=data_format
+        )
+        self.downsample1_0 = DownsamplingBottleneck(
+            16,
+            64,
+            return_indices=True,
+            dropout_prob=0.01,
+            relu=encoder_relu,
+            data_format=data_format,
+        )
+        self.regular1_1 = RegularBottleneck(
+            64, padding=1, dropout_prob=0.01, relu=encoder_relu, data_format=data_format
+        )
+        self.regular1_2 = RegularBottleneck(
+            64, padding=1, dropout_prob=0.01, relu=encoder_relu, data_format=data_format
+        )
+        self.regular1_3 = RegularBottleneck(
+            64, padding=1, dropout_prob=0.01, relu=encoder_relu, data_format=data_format
+        )
+        self.regular1_4 = RegularBottleneck(
+            64, padding=1, dropout_prob=0.01, relu=encoder_relu, data_format=data_format
+        )
+        self.downsample2_0 = DownsamplingBottleneck(
+            64,
+            128,
+            return_indices=True,
+            dropout_prob=0.1,
+            relu=encoder_relu,
+            data_format=data_format,
+        )
+        self.regular2_1 = RegularBottleneck(
+            128, padding=1, dropout_prob=0.1, relu=encoder_relu, data_format=data_format
+        )
+        self.dilated2_2 = RegularBottleneck(
+            128,
+            dilation=2,
+            padding=2,
+            dropout_prob=0.1,
+            relu=encoder_relu,
+            data_format=data_format,
+        )
+        self.asymmetric2_3 = RegularBottleneck(
+            128,
+            kernel_size=5,
+            padding=2,
+            asymmetric=True,
+            dropout_prob=0.1,
+            relu=encoder_relu,
+            data_format=data_format,
+        )
+        self.dilated2_4 = RegularBottleneck(
+            128,
+            dilation=4,
+            padding=4,
+            dropout_prob=0.1,
+            relu=encoder_relu,
+            data_format=data_format,
+        )
+        self.regular2_5 = RegularBottleneck(
+            128, padding=1, dropout_prob=0.1, relu=encoder_relu, data_format=data_format
+        )
+        self.dilated2_6 = RegularBottleneck(
+            128,
+            dilation=8,
+            padding=8,
+            dropout_prob=0.1,
+            relu=encoder_relu,
+            data_format=data_format,
+        )
+        self.asymmetric2_7 = RegularBottleneck(
+            128,
+            kernel_size=5,
+            asymmetric=True,
+            padding=2,
+            dropout_prob=0.1,
+            relu=encoder_relu,
+            data_format=data_format,
+        )
+        self.dilated2_8 = RegularBottleneck(
+            128,
+            dilation=16,
+            padding=16,
+            dropout_prob=0.1,
+            relu=encoder_relu,
+            data_format=data_format,
+        )
+        self.regular3_0 = RegularBottleneck(
+            128, padding=1, dropout_prob=0.1, relu=encoder_relu, data_format=data_format
+        )
+        self.dilated3_1 = RegularBottleneck(
+            128,
+            dilation=2,
+            padding=2,
+            dropout_prob=0.1,
+            relu=encoder_relu,
+            data_format=data_format,
+        )
+        self.asymmetric3_2 = RegularBottleneck(
+            128,
+            kernel_size=5,
+            padding=2,
+            asymmetric=True,
+            dropout_prob=0.1,
+            relu=encoder_relu,
+            data_format=data_format,
+        )
+        self.dilated3_3 = RegularBottleneck(
+            128,
+            dilation=4,
+            padding=4,
+            dropout_prob=0.1,
+            relu=encoder_relu,
+            data_format=data_format,
+        )
+        self.regular3_4 = RegularBottleneck(
+            128, padding=1, dropout_prob=0.1, relu=encoder_relu, data_format=data_format
+        )
+        self.dilated3_5 = RegularBottleneck(
+            128,
+            dilation=8,
+            padding=8,
+            dropout_prob=0.1,
+            relu=encoder_relu,
+            data_format=data_format,
+        )
+        self.asymmetric3_6 = RegularBottleneck(
+            128,
+            kernel_size=5,
+            asymmetric=True,
+            padding=2,
+            dropout_prob=0.1,
+            relu=encoder_relu,
+            data_format=data_format,
+        )
+        self.dilated3_7 = RegularBottleneck(
+            128,
+            dilation=16,
+            padding=16,
+            dropout_prob=0.1,
+            relu=encoder_relu,
+            data_format=data_format,
+        )
+        self.upsample4_0 = UpsamplingBottleneck(
+            128, 64, dropout_prob=0.1, relu=decoder_relu, data_format=data_format
+        )
+        self.regular4_1 = RegularBottleneck(
+            64, padding=1, dropout_prob=0.1, relu=decoder_relu, data_format=data_format
+        )
+        self.regular4_2 = RegularBottleneck(
+            64, padding=1, dropout_prob=0.1, relu=decoder_relu, data_format=data_format
+        )
+        self.upsample5_0 = UpsamplingBottleneck(
+            64, 16, dropout_prob=0.1, relu=decoder_relu, data_format=data_format
+        )
+        self.regular5_1 = RegularBottleneck(
+            16, padding=1, dropout_prob=0.1, relu=decoder_relu, data_format=data_format
+        )
+        self.transposed_conv = nn.ConvTranspose2d(
+            in_channels=16,
+            out_channels=num_classes,
+            kernel_size=3,
+            stride=2,
+            padding=1,
+            b_init=False,
+            data_format=data_format,
+        )
 
     def forward(self, x):
-        input_size = x.shape
+        input_size = tlx.get_tensor_shape(x)
         x = self.initial_block(x)
-        stage1_input_size = x.shape
+        stage1_input_size = tlx.get_tensor_shape(x)
         x, max_indices1_0 = self.downsample1_0(x)
         x = self.regular1_1(x)
         x = self.regular1_2(x)
         x = self.regular1_3(x)
         x = self.regular1_4(x)
-        stage2_input_size = x.shape
+        stage2_input_size = tlx.get_tensor_shape(x)
         x, max_indices2_0 = self.downsample2_0(x)
         x = self.regular2_1(x)
         x = self.dilated2_2(x)
@@ -123,8 +231,13 @@ class ENet(nn.Module):
         x = self.regular4_2(x)
         x = self.upsample5_0(x, max_indices1_0, output_size=stage1_input_size)
         x = self.regular5_1(x)
-        x = self.transposed_conv(x, output_size=input_size[2:])
-        return [x]
+        x = self.transposed_conv(
+            x,
+            output_size=input_size[2:]
+            if self.data_format == "channels_first"
+            else input_size[1:3],
+        )
+        return x
 
 
 class InitialBlock(nn.Module):
@@ -150,25 +263,41 @@ class InitialBlock(nn.Module):
             function; otherwise, PReLU is used. Default: True.
     """
 
-    def __init__(self, in_channels, out_channels, bias=False, relu=True):
-        super(InitialBlock, self).__init__()
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        bias=False,
+        relu=True,
+        data_format="channels_first",
+    ):
+        super().__init__()
+        self.data_format = data_format
         if relu:
             activation = nn.ReLU
         else:
             activation = nn.PRelu
-        self.main_branch = nn.GroupConv2d(kernel_size=3, stride=2, padding=\
-            1, in_channels=in_channels, out_channels=out_channels - 3,
-            b_init=bias, data_format='channels_first')
-        self.ext_branch = paddle2tlx.pd2tlx.ops.tlxops.tlx_MaxPool2d(3,
-            stride=2, padding=1)
-        self.batch_norm = nn.BatchNorm2d(num_features=out_channels,
-            data_format='channels_first')
+        self.main_branch = nn.GroupConv2d(
+            kernel_size=3,
+            stride=2,
+            padding=1,
+            in_channels=in_channels,
+            out_channels=out_channels - 3,
+            b_init=bias,
+            data_format=data_format,
+        )
+        self.ext_branch = nn.MaxPool2d(
+            3, stride=2, padding=1, data_format=data_format)
+        self.batch_norm = nn.BatchNorm2d(
+            num_features=out_channels, data_format=data_format
+        )
         self.out_activation = activation()
 
     def forward(self, x):
         main = self.main_branch(x)
         ext = self.ext_branch(x)
-        out = tensorlayerx.concat((main, ext), 1)
+        out = tlx.concat((main, ext), 1 if self.data_format ==
+                         "channels_first" else -1)
         out = self.batch_norm(out)
         return self.out_activation(out)
 
@@ -210,52 +339,115 @@ class RegularBottleneck(nn.Module):
             function; otherwise, PReLU is used. Default: True.
     """
 
-    def __init__(self, channels, internal_ratio=4, kernel_size=3, padding=0,
-        dilation=1, asymmetric=False, dropout_prob=0, bias=False, relu=True):
-        super(RegularBottleneck, self).__init__()
+    def __init__(
+        self,
+        channels,
+        internal_ratio=4,
+        kernel_size=3,
+        padding=0,
+        dilation=1,
+        asymmetric=False,
+        dropout_prob=0,
+        bias=False,
+        relu=True,
+        data_format="channels_first",
+    ):
+        super().__init__()
         if internal_ratio <= 1 or internal_ratio > channels:
             raise RuntimeError(
-                'Value out of range. Expected value in the interval [1, {0}], got internal_scale={1}.'
-                .format(channels, internal_ratio))
+                "Value out of range. Expected value in the interval [1, {0}], got internal_scale={1}.".format(
+                    channels, internal_ratio
+                )
+            )
         internal_channels = channels // internal_ratio
         if relu:
             activation = nn.ReLU
         else:
             activation = nn.PRelu
-        self.ext_conv1 = nn.Sequential([nn.GroupConv2d(kernel_size=1,
-            stride=1, in_channels=channels, out_channels=internal_channels,
-            b_init=bias, padding=0, data_format='channels_first'), nn.
-            BatchNorm2d(num_features=internal_channels, data_format=\
-            'channels_first'), activation()])
+        self.ext_conv1 = nn.Sequential(
+            [
+                nn.GroupConv2d(
+                    kernel_size=1,
+                    stride=1,
+                    in_channels=channels,
+                    out_channels=internal_channels,
+                    b_init=bias,
+                    padding=0,
+                    data_format=data_format,
+                ),
+                nn.BatchNorm2d(num_features=internal_channels,
+                               data_format=data_format),
+                activation(),
+            ]
+        )
         if asymmetric:
-            self.ext_conv2 = nn.Sequential([nn.GroupConv2d(kernel_size=(
-                kernel_size, 1), stride=1, padding=tuple((padding, 0)),
-                dilation=dilation, in_channels=internal_channels,
-                out_channels=internal_channels, b_init=bias, data_format=\
-                'channels_first'), nn.BatchNorm2d(num_features=\
-                internal_channels, data_format='channels_first'),
-                activation(), nn.GroupConv2d(kernel_size=(1, kernel_size),
-                stride=1, padding=tuple((0, padding)), dilation=dilation,
-                in_channels=internal_channels, out_channels=\
-                internal_channels, b_init=bias, data_format=\
-                'channels_first'), nn.BatchNorm2d(num_features=\
-                internal_channels, data_format='channels_first'), activation()]
-                )
+            self.ext_conv2 = nn.Sequential(
+                [
+                    nn.GroupConv2d(
+                        kernel_size=(kernel_size, 1),
+                        stride=1,
+                        padding=tuple((padding, 0)),
+                        dilation=dilation,
+                        in_channels=internal_channels,
+                        out_channels=internal_channels,
+                        b_init=bias,
+                        data_format=data_format,
+                    ),
+                    nn.BatchNorm2d(
+                        num_features=internal_channels, data_format=data_format
+                    ),
+                    activation(),
+                    nn.GroupConv2d(
+                        kernel_size=(1, kernel_size),
+                        stride=1,
+                        padding=tuple((0, padding)),
+                        dilation=dilation,
+                        in_channels=internal_channels,
+                        out_channels=internal_channels,
+                        b_init=bias,
+                        data_format=data_format,
+                    ),
+                    nn.BatchNorm2d(
+                        num_features=internal_channels, data_format=data_format
+                    ),
+                    activation(),
+                ]
+            )
         else:
-            self.ext_conv2 = nn.Sequential([nn.GroupConv2d(kernel_size=\
-                kernel_size, stride=1, padding=padding, dilation=dilation,
-                in_channels=internal_channels, out_channels=\
-                internal_channels, b_init=bias, data_format=\
-                'channels_first'), nn.BatchNorm2d(num_features=\
-                internal_channels, data_format='channels_first'), activation()]
-                )
-        self.ext_conv3 = nn.Sequential([nn.GroupConv2d(kernel_size=1,
-            stride=1, in_channels=internal_channels, out_channels=channels,
-            b_init=bias, padding=0, data_format='channels_first'), nn.
-            BatchNorm2d(num_features=channels, data_format='channels_first'
-            ), activation()])
-        self.ext_regul = paddle2tlx.pd2tlx.ops.tlxops.tlx_Dropout(p=\
-            dropout_prob)
+            self.ext_conv2 = nn.Sequential(
+                [
+                    nn.GroupConv2d(
+                        kernel_size=kernel_size,
+                        stride=1,
+                        padding=padding,
+                        dilation=dilation,
+                        in_channels=internal_channels,
+                        out_channels=internal_channels,
+                        b_init=bias,
+                        data_format=data_format,
+                    ),
+                    nn.BatchNorm2d(
+                        num_features=internal_channels, data_format=data_format
+                    ),
+                    activation(),
+                ]
+            )
+        self.ext_conv3 = nn.Sequential(
+            [
+                nn.GroupConv2d(
+                    kernel_size=1,
+                    stride=1,
+                    in_channels=internal_channels,
+                    out_channels=channels,
+                    b_init=bias,
+                    padding=0,
+                    data_format=data_format,
+                ),
+                nn.BatchNorm2d(num_features=channels, data_format=data_format),
+                activation(),
+            ]
+        )
+        self.ext_regul = nn.Dropout(p=dropout_prob)
         self.out_activation = activation()
 
     def forward(self, x):
@@ -299,38 +491,83 @@ class DownsamplingBottleneck(nn.Module):
             function; otherwise, PReLU is used. Default: True.
     """
 
-    def __init__(self, in_channels, out_channels, internal_ratio=4,
-        return_indices=False, dropout_prob=0, bias=False, relu=True):
-        super(DownsamplingBottleneck, self).__init__()
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        internal_ratio=4,
+        return_indices=False,
+        dropout_prob=0,
+        bias=False,
+        relu=True,
+        data_format="channels_first",
+    ):
+        super().__init__()
+        self.data_format = data_format
         self.return_indices = return_indices
         if internal_ratio <= 1 or internal_ratio > in_channels:
             raise RuntimeError(
-                'Value out of range. Expected value in the interval [1, {0}], got internal_scale={1}. '
-                .format(in_channels, internal_ratio))
+                "Value out of range. Expected value in the interval [1, {0}], got internal_scale={1}. ".format(
+                    in_channels, internal_ratio
+                )
+            )
         internal_channels = in_channels // internal_ratio
         if relu:
             activation = nn.ReLU
         else:
             activation = nn.PRelu
-        self.main_max1 = paddle2tlx.pd2tlx.ops.tlxops.tlx_MaxPool2d(2,
-            stride=2, return_mask=return_indices)
-        self.ext_conv1 = nn.Sequential([nn.GroupConv2d(kernel_size=2,
-            stride=2, in_channels=in_channels, out_channels=\
-            internal_channels, b_init=bias, padding=0, data_format=\
-            'channels_first'), nn.BatchNorm2d(num_features=\
-            internal_channels, data_format='channels_first'), activation()])
-        self.ext_conv2 = nn.Sequential([nn.GroupConv2d(kernel_size=3,
-            stride=1, padding=1, in_channels=internal_channels,
-            out_channels=internal_channels, b_init=bias, data_format=\
-            'channels_first'), nn.BatchNorm2d(num_features=\
-            internal_channels, data_format='channels_first'), activation()])
-        self.ext_conv3 = nn.Sequential([nn.GroupConv2d(kernel_size=1,
-            stride=1, in_channels=internal_channels, out_channels=\
-            out_channels, b_init=bias, padding=0, data_format=\
-            'channels_first'), nn.BatchNorm2d(num_features=out_channels,
-            data_format='channels_first'), activation()])
-        self.ext_regul = paddle2tlx.pd2tlx.ops.tlxops.tlx_Dropout(p=\
-            dropout_prob)
+        self.main_max1 = nn.MaxPool2d(
+            2, stride=2, padding=0, return_mask=return_indices, data_format=data_format
+        )
+        self.ext_conv1 = nn.Sequential(
+            [
+                nn.GroupConv2d(
+                    kernel_size=2,
+                    stride=2,
+                    in_channels=in_channels,
+                    out_channels=internal_channels,
+                    b_init=bias,
+                    padding=0,
+                    data_format=data_format,
+                ),
+                nn.BatchNorm2d(num_features=internal_channels,
+                               data_format=data_format),
+                activation(),
+            ]
+        )
+        self.ext_conv2 = nn.Sequential(
+            [
+                nn.GroupConv2d(
+                    kernel_size=3,
+                    stride=1,
+                    padding=1,
+                    in_channels=internal_channels,
+                    out_channels=internal_channels,
+                    b_init=bias,
+                    data_format=data_format,
+                ),
+                nn.BatchNorm2d(num_features=internal_channels,
+                               data_format=data_format),
+                activation(),
+            ]
+        )
+        self.ext_conv3 = nn.Sequential(
+            [
+                nn.GroupConv2d(
+                    kernel_size=1,
+                    stride=1,
+                    in_channels=internal_channels,
+                    out_channels=out_channels,
+                    b_init=bias,
+                    padding=0,
+                    data_format=data_format,
+                ),
+                nn.BatchNorm2d(num_features=out_channels,
+                               data_format=data_format),
+                activation(),
+            ]
+        )
+        self.ext_regul = nn.Dropout(p=dropout_prob)
         self.out_activation = activation()
 
     def forward(self, x):
@@ -342,10 +579,11 @@ class DownsamplingBottleneck(nn.Module):
         ext = self.ext_conv2(ext)
         ext = self.ext_conv3(ext)
         ext = self.ext_regul(ext)
-        n, ch_ext, h, w = ext.shape
-        ch_main = main.shape[1]
-        padding = tensorlayerx.zeros((n, ch_ext - ch_main, h, w))
-        main = tensorlayerx.concat((main, padding), 1)
+        axis = 1 if self.data_format == "channels_first" else -1
+        shape = tlx.get_tensor_shape(ext)
+        shape[axis] -= tlx.get_tensor_shape(main)[axis]
+        padding = tlx.zeros(shape)
+        main = tlx.concat((main, padding), axis=axis)
         out = main + ext
         return self.out_activation(out), max_indices
 
@@ -382,52 +620,110 @@ class UpsamplingBottleneck(nn.Module):
             function; otherwise, PReLU is used. Default: True.
     """
 
-    def __init__(self, in_channels, out_channels, internal_ratio=4,
-        dropout_prob=0, bias=False, relu=True):
-        super(UpsamplingBottleneck, self).__init__()
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        internal_ratio=4,
+        dropout_prob=0,
+        bias=False,
+        relu=True,
+        data_format="channels_first",
+    ):
+        super().__init__()
+        self.data_format = data_format
         if internal_ratio <= 1 or internal_ratio > in_channels:
             raise RuntimeError(
-                'Value out of range. Expected value in the interval [1, {0}], got internal_scale={1}. '
-                .format(in_channels, internal_ratio))
+                "Value out of range. Expected value in the interval [1, {0}], got internal_scale={1}. ".format(
+                    in_channels, internal_ratio
+                )
+            )
         internal_channels = in_channels // internal_ratio
         if relu:
             activation = nn.ReLU
         else:
             activation = nn.PRelu
-        self.main_conv1 = nn.Sequential([nn.GroupConv2d(kernel_size=1,
-            in_channels=in_channels, out_channels=out_channels, b_init=bias,
-            padding=0, data_format='channels_first'), nn.BatchNorm2d(
-            num_features=out_channels, data_format='channels_first')])
-        self.ext_conv1 = nn.Sequential([nn.GroupConv2d(kernel_size=1,
-            in_channels=in_channels, out_channels=internal_channels, b_init
-            =bias, padding=0, data_format='channels_first'), nn.BatchNorm2d
-            (num_features=internal_channels, data_format='channels_first'),
-            activation()])
-        self.ext_tconv1 = paddle2tlx.pd2tlx.ops.tlxops.tlx_ConvTranspose2d(
-            in_channels=internal_channels, out_channels=internal_channels,
-            kernel_size=2, stride=2, data_format='channels_first', b_init=\
-            bias, padding=0)
-        self.ext_tconv1_bnorm = nn.BatchNorm2d(num_features=\
-            internal_channels, data_format='channels_first')
+        self.main_conv1 = nn.Sequential(
+            [
+                nn.GroupConv2d(
+                    kernel_size=1,
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    b_init=bias,
+                    padding=0,
+                    data_format=data_format,
+                ),
+                nn.BatchNorm2d(num_features=out_channels,
+                               data_format=data_format),
+            ]
+        )
+        self.ext_conv1 = nn.Sequential(
+            [
+                nn.GroupConv2d(
+                    kernel_size=1,
+                    in_channels=in_channels,
+                    out_channels=internal_channels,
+                    b_init=bias,
+                    padding=0,
+                    data_format=data_format,
+                ),
+                nn.BatchNorm2d(num_features=internal_channels,
+                               data_format=data_format),
+                activation(),
+            ]
+        )
+        self.ext_tconv1 = nn.ConvTranspose2d(
+            in_channels=internal_channels,
+            out_channels=internal_channels,
+            kernel_size=2,
+            stride=2,
+            padding=0,
+            b_init=bias,
+            data_format=data_format,
+        )
+        self.ext_tconv1_bnorm = nn.BatchNorm2d(
+            num_features=internal_channels, data_format=data_format
+        )
         self.ext_tconv1_activation = activation()
-        self.ext_conv2 = nn.Sequential([nn.GroupConv2d(kernel_size=1,
-            in_channels=internal_channels, out_channels=out_channels,
-            b_init=bias, padding=0, data_format='channels_first'), nn.
-            BatchNorm2d(num_features=out_channels, data_format=\
-            'channels_first')])
-        self.ext_regul = paddle2tlx.pd2tlx.ops.tlxops.tlx_Dropout(p=\
-            dropout_prob)
+        self.ext_conv2 = nn.Sequential(
+            [
+                nn.GroupConv2d(
+                    kernel_size=1,
+                    in_channels=internal_channels,
+                    out_channels=out_channels,
+                    padding=0,
+                    b_init=bias,
+                    data_format=data_format,
+                ),
+                nn.BatchNorm2d(num_features=out_channels,
+                               data_format=data_format),
+            ]
+        )
+        self.ext_regul = nn.Dropout(p=dropout_prob)
         self.out_activation = activation()
 
     def forward(self, x, max_indices, output_size):
         main = self.main_conv1(x)
-        main = paddle.nn.functional.max_unpool2d(main, max_indices,
-            kernel_size=2, output_size=output_size)
+        main = max_unpool2d(main, max_indices, output_size)
         ext = self.ext_conv1(x)
-        ext = self.ext_tconv1(ext, output_size=output_size[2:])
+        ext = self.ext_tconv1(
+            ext,
+            output_size=output_size[2:]
+            if self.data_format == "channels_first"
+            else output_size[1:3],
+        )
         ext = self.ext_tconv1_bnorm(ext)
         ext = self.ext_tconv1_activation(ext)
         ext = self.ext_conv2(ext)
         ext = self.ext_regul(ext)
         out = main + ext
         return self.out_activation(out)
+
+
+def max_unpool2d(x, max_indices, output_size):
+    out = tlx.zeros(output_size)
+    out = tlx.reshape(out, (-1,))
+    x = tlx.reshape(x, (-1,))
+    max_indices = tlx.convert_to_numpy(tlx.reshape(max_indices, (-1, 1)))
+    out = tlx.tensor_scatter_nd_update(out, max_indices, x)
+    return tlx.reshape(out, output_size)
