@@ -30,3 +30,4 @@ from .vision_transformer import (
     vit_large_patch32_384,
     VisionTransformer,
 )
+from .efficientnet import efficientnet, EfficientNet
