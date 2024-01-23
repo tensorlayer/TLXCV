@@ -36,6 +36,7 @@ class VGG(nn.Module):
                 (7, 7),
                 data_format=data_format
             )
+        self.flatten = tlx.FlattenReshape()
         if num_classes > 0:
             self.classifier = nn.Sequential([
                 nn.Linear(in_features=25088, out_features=4096),
@@ -52,7 +53,7 @@ class VGG(nn.Module):
         if self.with_pool:
             x = self.avgpool(x)
         if self.num_classes > 0:
-            x = tlx.flatten(x, 1)
+            x = self.flatten(x)
             x = self.classifier(x)
         return x
 

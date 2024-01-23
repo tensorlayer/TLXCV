@@ -229,6 +229,7 @@ class ResNet(nn.Module):
                 (1, 1),
                 data_format=data_format
             )
+        self.flatten = tlx.FlattenReshape()
         if num_classes > 0:
             self.fc = nn.Linear(
                 in_features=512 * block.expansion,
@@ -294,7 +295,7 @@ class ResNet(nn.Module):
         if self.with_pool:
             x = self.avgpool(x)
         if self.num_classes > 0:
-            x = tlx.flatten(x, 1)
+            x = self.flatten(x)
             x = self.fc(x)
         return x
 
