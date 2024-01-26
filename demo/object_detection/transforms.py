@@ -15,6 +15,7 @@ class LabelFormatConvert(object):
         Convert the target in COCO format into the format expected by DETR.
         """
         h, w = image.shape[:2]
+        size = w, h
 
         # get all COCO annotations for the given image
 
@@ -65,18 +66,15 @@ class LabelFormatConvert(object):
         )
         target["area"] = area[keep]
         target["iscrowd"] = iscrowd[keep]
-
-        target["orig_size"] = np.asarray([int(h), int(w)], dtype=np.int64)
-        target["size"] = np.asarray([int(h), int(w)], dtype=np.int64)
-
+        target["orig_size"] = np.asarray(size, dtype=np.int64)
+        target["size"] = np.asarray(size, dtype=np.int64)
         return image, target
 
     def convert_coco_poly_to_mask(self, segmentations, height, width):
         try:
             from pycocotools import mask as coco_mask
         except ImportError:
-            raise ImportError(
-                "Pycocotools is not installed in your environment.")
+            raise ImportError("Pycocotools is not installed in your environment.")
 
         masks = []
         for polygons in segmentations:
@@ -96,9 +94,10 @@ class LabelFormatConvert(object):
 
 
 class Resize(object):
-    def __init__(self, size, max_size):
+    def __init__(self, size, max_size, auto_divide=None):
         self.size = size
         self.max_size = max_size
+        self.auto_divide = auto_divide
 
     def __call__(self, data):
         image, label = data
@@ -114,24 +113,25 @@ class Resize(object):
         return cv2.resize(image, size, interpolation=resample)
 
     def _resize(self, image, size, target=None, max_size=None):
-        def get_size_with_aspect_ratio(image_size, size, max_size=None):
-            h, w = image_size
-            if max_size is not None:
+        def get_size_with_aspect_ratio(image_shape, shape, max_shape=None):
+            h, w = image_shape
+            if max_shape is not None:
                 min_original_size = float(min((w, h)))
                 max_original_size = float(max((w, h)))
-                if max_original_size / min_original_size * size > max_size:
-                    size = int(
-                        round(max_size * min_original_size / max_original_size))
+                if max_original_size / min_original_size * shape > max_shape:
+                    shape = int(
+                        round(max_shape * min_original_size / max_original_size)
+                    )
 
-            if (w <= h and w == size) or (h <= w and h == size):
+            if (w <= h and w == shape) or (h <= w and h == shape):
                 return (h, w)
 
             if w < h:
-                ow = size
-                oh = int(size * h / w)
+                ow = shape
+                oh = int(shape * h / w)
             else:
-                oh = size
-                ow = int(size * w / h)
+                oh = shape
+                ow = int(shape * w / h)
 
             return (oh, ow)
 
@@ -141,13 +141,16 @@ class Resize(object):
             else:
                 # size returned must be (w, h) since we use PIL to resize images
                 # so we revert the tuple
-                return get_size_with_aspect_ratio(image_size, size, max_size)
+                image_shape, shape, max_shape = (
+                    s if not isinstance(s, (list, tuple)) else s[::-1]
+                    for s in (image_size, size, max_size)
+                )
+                return get_size_with_aspect_ratio(image_shape, shape, max_shape)
 
         size = get_size(image.shape[:2], size, max_size)
+        if self.auto_divide:
+            size = tuple(make_divided(i, self.auto_divide) for i in size)
         rescaled_image = self.resize(image, size=size)
-
-        if target is None:
-            return rescaled_image, None
 
         ratios = tuple(
             float(s) / float(s_orig)
@@ -155,12 +158,15 @@ class Resize(object):
         )
         ratio_height, ratio_width = ratios
 
-        target = target.copy()
+        target = target.copy() if target else {}
+        if "orig_size" not in target:
+            h, w = image.shape[:2]
+            target["orig_size"] = np.asarray((w, h), dtype=np.int64)
+
         if "boxes" in target:
             boxes = target["boxes"]
             scaled_boxes = boxes * np.asarray(
-                [ratio_width, ratio_height, ratio_width,
-                    ratio_height], dtype=np.float32
+                [ratio_width, ratio_height, ratio_width, ratio_height], dtype=np.float32
             )
             target["boxes"] = scaled_boxes
 
@@ -169,20 +175,21 @@ class Resize(object):
             scaled_area = area * (ratio_width * ratio_height)
             target["area"] = scaled_area
 
-        w, h = size
-        target["size"] = np.asarray([h, w], dtype=np.int64)
+        target["size"] = np.asarray(size, dtype=np.int64)
+        target["im_shape"] = np.asarray(image.shape[:2], dtype=np.int64)
+        if "scale_factor" in target:
+            target["scale_factor"] *= (ratio_width, ratio_height)
+        else:
+            target["scale_factor"] = target["size"] / target["orig_size"]
 
         if "masks" in target:
             masks = np.transpose(target["masks"], axes=[1, 2, 0]).astype(float)
             interpolated_masks = (
-                cv2.resize(masks, (h, w),
-                           interpolation=cv2.INTER_NEAREST) > 0.5
+                cv2.resize(masks, size, interpolation=cv2.INTER_NEAREST) > 0.5
             )
             if len(interpolated_masks.shape) == 2:
-                interpolated_masks = np.expand_dims(
-                    interpolated_masks, axis=-1)
-            interpolated_masks = np.transpose(
-                interpolated_masks, axes=[2, 0, 1])
+                interpolated_masks = np.expand_dims(interpolated_masks, axis=-1)
+            interpolated_masks = np.transpose(interpolated_masks, axes=[2, 0, 1])
             target["masks"] = interpolated_masks
 
         return rescaled_image, target
@@ -235,6 +242,13 @@ class ToTensor(object):
     def __call__(self, data):
         image, label = data
         return to_tensor(image, self.data_format), label
+
+
+def make_divided(x, divided=8):
+    if divided:
+        d = x % divided
+        x += divided - d if d else 0
+    return x
 
 
 def corners_to_center_format(x):
@@ -334,8 +348,7 @@ def post_process_segmentation(outputs, target_sizes, threshold=0.9, mask_thresho
 
         cur_masks = (sigmoid(cur_masks) > mask_threshold) * 1
 
-        predictions = {"scores": cur_scores,
-                       "labels": cur_classes, "masks": cur_masks}
+        predictions = {"scores": cur_scores, "labels": cur_classes, "masks": cur_masks}
         preds.append(predictions)
     return preds
 
