@@ -2,13 +2,13 @@ import os
 
 # NOTE: need to set backend before `import tensorlayerx`
 # os.environ['TL_BACKEND'] = 'torch'
-# os.environ["TL_BACKEND"] = "paddle"
-os.environ["TL_BACKEND"] = "tensorflow"
+os.environ["TL_BACKEND"] = "paddle"
+# os.environ["TL_BACKEND"] = "tensorflow"
 
-# data_format = "channels_first"
-# data_format_short = "CHW"
-data_format = "channels_last"
-data_format_short = "HWC"
+data_format = "channels_first"
+data_format_short = "CHW"
+# data_format = "channels_last"
+# data_format_short = "HWC"
 
 from functools import partial
 
@@ -19,7 +19,7 @@ from tensorlayerx.vision.transforms import Compose
 from transforms import LabelFormatConvert, Normalize, Resize, ToTensor
 
 from tlxcv.datasets import CocoDetection
-from tlxcv.models import Detr
+from tlxcv.models import Detr, YOLOv3, SSD
 from tlxcv.tasks import ObjectDetection
 
 
@@ -30,19 +30,24 @@ def collate_fn(data, data_format="channels_first"):
     )
     new_data = []
     labels = []
-    for i, j, k in zip(data, padded_images, pixel_mask):
-        labels.append(i[1])
-        new_data.append({"images": j, "pixel_mask": k})
+    for (i, l), j, m in zip(data, padded_images, pixel_mask):
+        labels.append(l)
+        new_data.append(
+            {
+                "images": j,
+                "pixel_mask": m,
+                "im_shape": l["im_shape"],
+                "scale_factor": l["scale_factor"],
+                "orig_size": l["orig_size"],
+            }
+        )
+
     if len(data) >= 2:
-        return tlx.dataflow.dataloader.utils.default_collate(new_data), labels
+        inputs = tlx.dataflow.dataloader.utils.default_collate(new_data)
     else:
-        data = {}
-        for i, j in new_data[0].items():
-            data[i] = np.array([j])
-        # label = {}
-        # for i, j in labels[0].items():
-        #     label[i] = np.array([j])
-        return tlx.dataflow.dataloader.utils.default_convert(data), labels
+        data = {i: np.array([j]) for i, j in new_data[0].items()}
+        inputs = tlx.dataflow.dataloader.utils.default_convert(data)
+    return inputs, labels
 
 
 def _max_by_axis(the_list):
@@ -95,10 +100,11 @@ class EmptyMetric(object):
 
 
 if __name__ == "__main__":
+    # tlx.set_device('GPU')
     transforms = Compose(
         [
             LabelFormatConvert(),
-            Resize(size=800, max_size=1333),
+            Resize(size=600, max_size=800, auto_divide=32),
             Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ToTensor(data_format=data_format_short),
         ]
@@ -126,7 +132,9 @@ if __name__ == "__main__":
         collate_fn=partial(collate_fn, data_format=data_format),
     )
 
-    backbone = Detr(data_format=data_format)
+    # backbone = Detr(data_format=data_format)
+    # backbone = YOLOv3(data_format=data_format)
+    backbone = SSD(data_format=data_format)
     model = ObjectDetection(backbone=backbone)
 
     optimizer = tlx.optimizers.Adam(lr=1e-6)
