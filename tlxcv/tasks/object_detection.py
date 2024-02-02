@@ -17,6 +17,6 @@ class ObjectDetection(tlx.nn.Module):
     def forward(self, inputs: Any) -> Any:
         return self.backbone(inputs)
 
-    def predict(self, inputs: Any) -> Any:
+    def predict(self, inputs: Any, **kwargs) -> Any:
         self.set_eval()
-        return self.backbone(inputs)
+        return self.backbone(inputs, **kwargs)
