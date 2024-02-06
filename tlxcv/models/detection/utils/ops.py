@@ -1,5 +1,6 @@
 from typing import Any
 
+import numpy as np
 import tensorlayerx as tlx
 from decorator import decorator
 
@@ -405,7 +406,11 @@ def cvt_results(bbox, bbox_num):
 
 
 @decorator
-def auto_data_format(func, x, *args, data_format="NCHW", with_post_trans=False, **kwds):
+def with_NCHW(func, with_post_trans=False, *args, data_format="NCHW", **kwds):
+    if "x" not in kwds:
+        x, args = args[0], args[1:]
+    else:
+        x = kwds.pop("x")
     if not is_nchw(data_format):
         x = tlx.transpose(x, [0, 3, 1, 2])
     x = func(x, *args, **kwds)
@@ -414,12 +419,35 @@ def auto_data_format(func, x, *args, data_format="NCHW", with_post_trans=False, 
     return x
 
 
+@decorator
+def with_NHWC(func, with_post_trans=False, *args, data_format="NCHW", **kwds):
+    if "x" not in kwds:
+        x, args = args[0], args[1:]
+    else:
+        x = kwds.pop("x")
+    if is_nchw(data_format):
+        x = tlx.transpose(x, [0, 2, 3, 1])
+    x = func(x, *args, **kwds)
+    if is_nchw(data_format) and with_post_trans:
+        x = tlx.transpose(x, [0, 3, 1, 2])
+    return x
+
+
+C_ops = None
+yolo_box_func = None
+smooth_l1_loss_func = None
+softmax_with_cross_entropy = None
+interpolate = None
+multiclass_nms = tlx_multiclass_nms
+
+
+# pylint: disable=E1120:no-value-for-parameter
 if tlx.BACKEND == "paddle":
     import paddle
     import paddle._C_ops as C_ops
     from paddle.nn import functional as F
 
-    @auto_data_format
+    @with_NCHW
     def yolo_box_func(x, *args, **kwds):
         return paddle.vision.ops.yolo_box(x, *args, **kwds)
 
@@ -428,10 +456,10 @@ if tlx.BACKEND == "paddle":
         return F.interpolate(*args, data_format=data_format, **kwds)
 
     # pylint: disable=E1120:no-value-for-parameter
-    @auto_data_format(with_post_trans=True)
+    @with_NCHW(with_post_trans=True)
     def prior_box(x, *args, **kwds):
-        box, var = pd_prior_box(x, *args, **kwds)
-        return box
+        boxes, labels = pd_prior_box(x, *args, **kwds)
+        return boxes
 
     smooth_l1_loss_func = paddle.nn.functional.smooth_l1_loss
     softmax_with_cross_entropy = C_ops.softmax_with_cross_entropy
@@ -442,20 +470,39 @@ elif tlx.BACKEND == "torch":
     from torch.nn import functional as F
 
     # multiclass_nms = torchvision.ops.nms
-    multiclass_nms = tlx_multiclass_nms
-    yolo_box_func = None
 
-    @auto_data_format
+    @with_NCHW(with_post_trans=True)
     def interpolate(x, *args, **kwds):
         return F.interpolate(x, *args, **kwds)
 
-    smooth_l1_loss_func = None
-    prior_box = None
+    @with_NCHW(with_post_trans=True)
+    def prior_box(x, *args, **kwds):
+        raise NotImplementedError
 
-else:
-    C_ops = None
-    yolo_box_func = None
-    smooth_l1_loss_func = None
-    softmax_with_cross_entropy = None
-    interpolate = None
-    multiclass_nms = tlx_multiclass_nms
+    @with_NCHW(with_post_trans=True)
+    def resize(x, *args, method="nearest", antialias=False, **kwds):
+        if method in ("nearest", "area"):
+            antialias = None
+        return tlx.resize(x, *args, method=method, antialias=antialias, **kwds)
+
+elif tlx.BACKEND == "tensorflow":
+    import tensorflow as tf
+
+    @with_NHWC(with_post_trans=True)
+    def interpolate(x, *, size=None, scale_factor=None, **kwds):
+        assert size or scale_factor
+        if not size:
+            h, w = x.shape[1:3]
+            size = np.array((w, h)) * scale_factor
+            w, h = size.astype(int)
+        else:
+            if isinstance(size, (list, tuple)):
+                w, h = size
+            else:
+                assert isinstance(size, int)
+                h = w = size
+        return tf.image.resize(x, size=(h, w), **kwds)
+
+    @with_NHWC(with_post_trans=True)
+    def resize(x, *args, **kwds):
+        return tlx.resize(x, *args, **kwds)
