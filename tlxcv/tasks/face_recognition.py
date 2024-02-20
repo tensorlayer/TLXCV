@@ -3,10 +3,10 @@ from itertools import product as product
 from typing import Any, Callable, List, Tuple
 
 import cv2
+import face_recognition
 import numpy as np
 import tensorlayerx as tlx
 from tensorlayerx.utils.prepro import imresize
-from ..models.detection.utils.ops import is_nchw
 
 
 def nms_np(
@@ -134,7 +134,7 @@ class RetinaFaceTransform(object):
             ],
             axis=1,
         )
-        if is_nchw(self.data_format):
+        if self.data_format in ("NCHW", "channels_first"):
             n, c, h, w = inputs.shape
         else:
             n, h, w, c = inputs.shape
@@ -156,7 +156,7 @@ class RetinaFaceTransform(object):
         img = _pad_to_square(img)
         img, labels = self._resize(img, label, self.input_size)
         img = img.astype(np.float32)
-        if is_nchw(self.data_format):
+        if self.data_format in ("NCHW", "channels_first"):
             img = np.transpose(img, (2, 0, 1))
         labels = labels.astype(np.float32)
         labels = self.encode(labels=labels)
@@ -165,10 +165,10 @@ class RetinaFaceTransform(object):
     def test_call(self, img, label):
         img = img.astype(np.float32)
         h, w = img.shape[:2]
-        if is_nchw(self.data_format):
+        if self.data_format in ("NCHW", "channels_first"):
             img = np.transpose(img, (2, 0, 1))
         if label is not None:
-            labels[:, :14] /= (w, h) * 7
+            label[:, :14] /= (w, h) * 7
             priors = prior_box((w, h), self.min_sizes, self.steps, self.clip)
             encode = Encoder(priors, self.variances, self.ignore_thresh, self.match_thresh)
             labels = encode(label.astype(np.float32))
@@ -440,20 +440,24 @@ def _jaccard(box_a, box_b):
     return inter / union  # [A,B]
 
 
-def draw_bbox_landm(img, ann, index=""):
+def draw_bbox_landm(img, ann, index="", denorm=True):
     """draw bboxes and landmarks"""
     H, W = img.shape[:2]
     # bbox
-    p1p2 = ann[:4].reshape(-1, 2) * (W, H)
+    p1p2 = ann[:4].reshape(-1, 2)
+    if denorm:
+        p1p2 *= (W, H)
     p1, p2 = p1p2.clip(0, (W, H)).astype(int)
     cv2.rectangle(img, p1, p2, (0, 255, 0), 2)
 
     # confidence
-    text = f"{index}:{ann[15]:.4f}"
+    text = str(index)
+    if len(ann) > 15:
+        text += f":{ann[15]:.4f}"
     cv2.putText(img, text, p1, cv2.FONT_HERSHEY_DUPLEX, 0.3, (255, 255, 255))
 
     # landmark
-    if ann[14] > 0:
+    if len(ann) > 14 and ann[14] > 0:
         pts = ann[4:14].reshape(-1, 2) * (W, H)
         pts = pts.clip(0, (W, H)).astype(int)
         colors = (
@@ -467,9 +471,10 @@ def draw_bbox_landm(img, ann, index=""):
             cv2.circle(img, pt, 1, color, 2)
 
 
-def save_bbox_landm(path, img_raw, anns):
+def save_bbox_landm(path, img_raw, anns, denorm=True):
+    anns = np.array(anns)
     for i, ann in enumerate(anns):
-        draw_bbox_landm(img_raw, ann, i)
+        draw_bbox_landm(img_raw, ann, i, denorm=denorm)
     cv2.imwrite(path, img_raw)
 
 
@@ -496,3 +501,28 @@ class Decocder:
         landms = priors[..., :2] + points * self.variances[0] * priors[..., 2:]
         landms = landms.reshape((-1, 10))
         return landms
+
+
+def crop_face(img, bbox):
+    x1, y1, x2, y2 = bbox.astype(int)
+    return img[y1:y2, x1:x2].copy()
+
+
+def detect_faces(
+    image, model=None, transform=None, data_format="channels_first", **kwds
+):
+    if not model:
+        locs = face_recognition.face_locations(image, model="cnn")
+        locs = np.array(locs)
+        bbox = locs[:, [3, 0, 1, 2]]
+    else:
+        if not transform:
+            transform = RetinaFaceTransform(data_format=data_format)
+        assert isinstance(transform, RetinaFaceTransform)
+        h, w = image.shape[:2]
+        img, _ = transform.test_call(image, None)
+        img = tlx.convert_to_tensor([img])
+        bbox, landm, label = model(img)
+        outs = transform.decode_one(bbox, landm, label, img, **kwds)
+        bbox = outs[:4] * (w, h, w, h)
+    return bbox

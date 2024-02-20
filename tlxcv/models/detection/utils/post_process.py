@@ -1,5 +1,4 @@
 import numpy as np
-import paddle
 import tensorlayerx as tlx
 from .bbox_utils import nonempty_bbox
 
@@ -99,12 +98,10 @@ class BBoxPostProcess(object):
             origin_shape_list = []
             scale_factor_list = []
             for i in range(bbox_num.shape[0]):
-                expand_shape = paddle.expand(
-                    origin_shape[i : i + 1, :], [bbox_num[i], 2]
-                )
+                expand_shape = tlx.expand(origin_shape[i : i + 1, :], [bbox_num[i], 2])
                 scale_y, scale_x = scale_factor[i][0], scale_factor[i][1]
                 scale = tlx.concat([scale_x, scale_y, scale_x, scale_y])
-                expand_scale = paddle.expand(scale, [bbox_num[i], 4])
+                expand_scale = tlx.expand(scale, [bbox_num[i], 4])
                 origin_shape_list.append(expand_shape)
                 scale_factor_list.append(expand_scale)
             self.origin_shape_list = tlx.concat(origin_shape_list)
@@ -112,8 +109,8 @@ class BBoxPostProcess(object):
         else:
             scale_y, scale_x = scale_factor[0][0], scale_factor[0][1]
             scale = tlx.concat([scale_x, scale_y, scale_x, scale_y]).unsqueeze(0)
-            self.origin_shape_list = paddle.expand(origin_shape, [bbox_num[0], 2])
-            scale_factor_list = paddle.expand(scale, [bbox_num[0], 4])
+            self.origin_shape_list = tlx.expand(origin_shape, [bbox_num[0], 2])
+            scale_factor_list = tlx.expand(scale, [bbox_num[0], 4])
         pred_label = bboxes[:, 0:1]
         pred_score = bboxes[:, 1:2]
         pred_bbox = bboxes[:, 2:]
@@ -128,7 +125,7 @@ class BBoxPostProcess(object):
         pred_bbox = tlx.ops.stack([x1, y1, x2, y2], axis=-1)
         keep_mask = nonempty_bbox(pred_bbox, return_mask=True)
         keep_mask = tlx.expand_dims(keep_mask, [1])
-        pred_label = tlx.where(keep_mask, pred_label, paddle.ones_like(pred_label) * -1)
+        pred_label = tlx.where(keep_mask, pred_label, tlx.ones_like(pred_label) * -1)
         pred_result = tlx.concat([pred_label, pred_score, pred_bbox], axis=1)
         return bboxes, pred_result, bbox_num
 
