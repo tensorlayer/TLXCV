@@ -1,26 +1,100 @@
 import tensorlayerx as tlx
-import paddle
-import paddle2tlx
-import tensorlayerx
 import tensorlayerx.nn as nn
-from ops.ops_fusion import ConvNormActivation
-from paddle2tlx.pd2tlx.utils import restore_model_clas
-__all__ = []
-model_urls = {'mobilenetv1_1.0': (
-    'https://paddle-hapi.bj.bcebos.com/models/mobilenetv1_1.0.pdparams',
-    '3033ab1975b1670bef51545feb65fc45')}
+
+__all__ = ["MobileNetV1"]
+
+
+class ConvNormActivation(nn.Sequential):
+    """
+    Configurable block used for Convolution-Normalzation-Activation blocks.
+    This code is based on the torchvision code with modifications.
+    You can also see at https://github.com/pytorch/vision/blob/main/torchvision/ops/misc.py#L68
+    Args:
+        in_channels (int): Number of channels in the input image
+        out_channels (int): Number of channels produced by the Convolution-Normalzation-Activation block
+        kernel_size: (int|list|tuple, optional): Size of the convolving kernel. Default: 3
+        stride (int|list|tuple, optional): Stride of the convolution. Default: 1
+        padding (int|str|tuple|list, optional): Padding added to all four sides of the input. Default: None,
+            in wich case it will calculated as ``padding = (kernel_size - 1) // 2 * dilation``
+        groups (int, optional): Number of blocked connections from input channels to output channels. Default: 1
+        batch_norm (Callable[..., nn.Module], optional): Norm layer that will be stacked on top of the convolutiuon layer.
+            If ``None`` this layer wont be used. Default: ``nn.BatchNorm2D``
+        activation_layer (Callable[..., nn.Module], optional): Activation function which will be stacked on top of the normalization
+            layer (if not ``None``), otherwise on top of the conv layer. If ``None`` this layer wont be used. Default: ``nn.ReLU``
+        dilation (int): Spacing between kernel elements. Default: 1
+        bias (bool, optional): Whether to use bias in the convolution layer. By default, biases are included if ``batch_norm is None``.
+    """
+
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size=3,
+        stride=1,
+        padding=None,
+        groups=1,
+        batch_norm=nn.BatchNorm2d,
+        activation_layer=nn.ReLU,
+        dilation=1,
+        bias=None,
+        data_format="channels_first",
+    ):
+        if padding is None:
+            padding = (kernel_size - 1) // 2 * dilation
+        if bias is None:
+            bias = batch_norm is None
+        layers = [
+            nn.GroupConv2d(
+                dilation=dilation,
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                b_init=bias,
+                n_group=groups,
+                data_format=data_format,
+            )
+        ]
+        if batch_norm is not None:
+            layers.append(
+                batch_norm(num_features=out_channels, data_format=data_format)
+            )
+        if activation_layer is not None:
+            layers.append(activation_layer())
+        super().__init__(*layers)
 
 
 class DepthwiseSeparable(nn.Module):
-
-    def __init__(self, in_channels, out_channels1, out_channels2,
-        num_groups, stride, scale):
-        super(DepthwiseSeparable, self).__init__()
-        self._depthwise_conv = ConvNormActivation(in_channels, int(
-            out_channels1 * scale), kernel_size=3, stride=stride, padding=1,
-            groups=int(num_groups * scale))
-        self._pointwise_conv = ConvNormActivation(int(out_channels1 * scale
-            ), int(out_channels2 * scale), kernel_size=1, stride=1, padding=0)
+    def __init__(
+        self,
+        in_channels,
+        out_channels1,
+        out_channels2,
+        num_groups,
+        stride,
+        scale,
+        data_format="channels_first",
+        name=None,
+    ):
+        super().__init__(name=name)
+        self._depthwise_conv = ConvNormActivation(
+            in_channels,
+            int(out_channels1 * scale),
+            kernel_size=3,
+            stride=stride,
+            padding=1,
+            groups=int(num_groups * scale),
+            data_format=data_format,
+        )
+        self._pointwise_conv = ConvNormActivation(
+            int(out_channels1 * scale),
+            int(out_channels2 * scale),
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            data_format=data_format,
+        )
 
     def forward(self, x):
         x = self._depthwise_conv(x)
@@ -34,123 +108,155 @@ class MobileNetV1(nn.Module):
 
     Args:
         scale (float): scale of channels in each layer. Default: 1.0.
-        num_classes (int): output dim of last fc layer. If num_classes <=0, last fc layer 
+        num_classes (int): output dim of last fc layer. If num_classes <=0, last fc layer
                             will not be defined. Default: 1000.
         with_pool (bool): use pool before the last fc layer or not. Default: True.
-
-    Examples:
-        .. code-block:: python
-
-            import paddle
-            from paddle.vision.models import MobileNetV1
-
-            model = MobileNetV1()
-
-            x = paddle.rand([1, 3, 224, 224])
-            out = model(x)
-
-            print(out.shape)
     """
 
-    def __init__(self, scale=1.0, num_classes=1000, with_pool=True):
-        super(MobileNetV1, self).__init__()
+    def __init__(
+        self,
+        scale=1.0,
+        num_classes=1000,
+        with_pool=True,
+        data_format="channels_first",
+    ):
+        super().__init__()
         self.scale = scale
         self.dwsl = []
         self.num_classes = num_classes
         self.with_pool = with_pool
-        self.conv1 = ConvNormActivation(in_channels=3, out_channels=int(32 *
-            scale), kernel_size=3, stride=2, padding=1)
-        dws21 = self.add_sublayer(sublayer=DepthwiseSeparable(in_channels=\
-            int(32 * scale), out_channels1=32, out_channels2=64, num_groups
-            =32, stride=1, scale=scale), name='conv2_1')
-        self.dwsl.append(dws21)
-        dws22 = self.add_sublayer(sublayer=DepthwiseSeparable(in_channels=\
-            int(64 * scale), out_channels1=64, out_channels2=128,
-            num_groups=64, stride=2, scale=scale), name='conv2_2')
-        self.dwsl.append(dws22)
-        dws31 = self.add_sublayer(sublayer=DepthwiseSeparable(in_channels=\
-            int(128 * scale), out_channels1=128, out_channels2=128,
-            num_groups=128, stride=1, scale=scale), name='conv3_1')
-        self.dwsl.append(dws31)
-        dws32 = self.add_sublayer(sublayer=DepthwiseSeparable(in_channels=\
-            int(128 * scale), out_channels1=128, out_channels2=256,
-            num_groups=128, stride=2, scale=scale), name='conv3_2')
-        self.dwsl.append(dws32)
-        dws41 = self.add_sublayer(sublayer=DepthwiseSeparable(in_channels=\
-            int(256 * scale), out_channels1=256, out_channels2=256,
-            num_groups=256, stride=1, scale=scale), name='conv4_1')
-        self.dwsl.append(dws41)
-        dws42 = self.add_sublayer(sublayer=DepthwiseSeparable(in_channels=\
-            int(256 * scale), out_channels1=256, out_channels2=512,
-            num_groups=256, stride=2, scale=scale), name='conv4_2')
-        self.dwsl.append(dws42)
+        self.conv1 = ConvNormActivation(
+            in_channels=3,
+            out_channels=int(32 * scale),
+            kernel_size=3,
+            stride=2,
+            padding=1,
+            data_format=data_format,
+        )
+        self.dwsl.append(
+            DepthwiseSeparable(
+                in_channels=int(32 * scale),
+                out_channels1=32,
+                out_channels2=64,
+                num_groups=32,
+                stride=1,
+                scale=scale,
+                data_format=data_format,
+                name="conv2_1",
+            ),
+        )
+        self.dwsl.append(
+            DepthwiseSeparable(
+                in_channels=int(64 * scale),
+                out_channels1=64,
+                out_channels2=128,
+                num_groups=64,
+                stride=2,
+                scale=scale,
+                data_format=data_format,
+                name="conv2_2",
+            ),
+        )
+        self.dwsl.append(
+            DepthwiseSeparable(
+                in_channels=int(128 * scale),
+                out_channels1=128,
+                out_channels2=128,
+                num_groups=128,
+                stride=1,
+                scale=scale,
+                data_format=data_format,
+                name="conv3_1",
+            ),
+        )
+        self.dwsl.append(
+            DepthwiseSeparable(
+                in_channels=int(128 * scale),
+                out_channels1=128,
+                out_channels2=256,
+                num_groups=128,
+                stride=2,
+                scale=scale,
+                data_format=data_format,
+                name="conv3_2",
+            ),
+        )
+        self.dwsl.append(
+            DepthwiseSeparable(
+                in_channels=int(256 * scale),
+                out_channels1=256,
+                out_channels2=256,
+                num_groups=256,
+                stride=1,
+                scale=scale,
+                data_format=data_format,
+                name="conv4_1",
+            ),
+        )
+        self.dwsl.append(
+            DepthwiseSeparable(
+                in_channels=int(256 * scale),
+                out_channels1=256,
+                out_channels2=512,
+                num_groups=256,
+                stride=2,
+                scale=scale,
+                data_format=data_format,
+                name="conv4_2",
+            ),
+        )
         for i in range(5):
-            tmp = self.add_sublayer(sublayer=DepthwiseSeparable(in_channels
-                =int(512 * scale), out_channels1=512, out_channels2=512,
-                num_groups=512, stride=1, scale=scale), name='conv5_' + str
-                (i + 1))
-            self.dwsl.append(tmp)
-        dws56 = self.add_sublayer(sublayer=DepthwiseSeparable(in_channels=\
-            int(512 * scale), out_channels1=512, out_channels2=1024,
-            num_groups=512, stride=2, scale=scale), name='conv5_6')
-        self.dwsl.append(dws56)
-        dws6 = self.add_sublayer(sublayer=DepthwiseSeparable(in_channels=\
-            int(1024 * scale), out_channels1=1024, out_channels2=1024,
-            num_groups=1024, stride=1, scale=scale), name='conv6')
-        self.dwsl.append(dws6)
+            self.dwsl.append(
+                DepthwiseSeparable(
+                    in_channels=int(512 * scale),
+                    out_channels1=512,
+                    out_channels2=512,
+                    num_groups=512,
+                    stride=1,
+                    scale=scale,
+                    data_format=data_format,
+                    name="conv5_" + str(i + 1),
+                ),
+            )
+        self.dwsl.append(
+            DepthwiseSeparable(
+                in_channels=int(512 * scale),
+                out_channels1=512,
+                out_channels2=1024,
+                num_groups=512,
+                stride=2,
+                scale=scale,
+                data_format=data_format,
+                name="conv5_6",
+            ),
+        )
+        self.dwsl.append(
+            DepthwiseSeparable(
+                in_channels=int(1024 * scale),
+                out_channels1=1024,
+                out_channels2=1024,
+                num_groups=1024,
+                stride=1,
+                scale=scale,
+                data_format=data_format,
+                name="conv6",
+            ),
+        )
+        self.dwsl = nn.Sequential(*self.dwsl)
         if with_pool:
-            self.pool2d_avg = nn.AdaptiveAvgPool2d(1, data_format=\
-                'channels_first')
+            self.pool2d_avg = nn.AdaptiveAvgPool2d(1, data_format=data_format)
         if num_classes > 0:
-            self.fc = nn.Linear(in_features=int(1024 * scale), out_features
-                =num_classes)
+            self.fc = nn.Linear(
+                in_features=int(1024 * scale),
+                out_features=num_classes
+            )
 
     def forward(self, x):
         x = self.conv1(x)
-        for dws in self.dwsl:
-            x = dws(x)
+        x = self.dwsl(x)
         if self.with_pool:
             x = self.pool2d_avg(x)
         if self.num_classes > 0:
-            x = tensorlayerx.flatten(x, 1)
+            x = tlx.reshape(x, (tlx.get_tensor_shape(x)[0], -1))
             x = self.fc(x)
         return x
-
-
-def _mobilenet(arch, pretrained=False, **kwargs):
-    model = MobileNetV1(**kwargs)
-    if pretrained:
-        model = restore_model_clas(model, arch, model_urls)
-    return model
-
-
-def mobilenet_v1(pretrained=False, scale=1.0, **kwargs):
-    """MobileNetV1
-    
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet. Default: False.
-        scale: (float): scale of channels in each layer. Default: 1.0.
-
-    Examples:
-        .. code-block:: python
-
-            import paddle
-            from paddle.vision.models import mobilenet_v1
-
-            # build model
-            model = mobilenet_v1()
-
-            # build model and load imagenet pretrained weight
-            # model = mobilenet_v1(pretrained=True)
-
-            # build mobilenet v1 with scale=0.5
-            model_scale = mobilenet_v1(scale=0.5)
-
-            x = paddle.rand([1, 3, 224, 224])
-            out = model(x)
-
-            print(out.shape)
-    """
-    model = _mobilenet('mobilenetv1_' + str(scale), pretrained, scale=scale,
-        **kwargs)
-    return model
