@@ -3,9 +3,12 @@ from tlxzoo.vision.ocr import OpticalCharacterRecognition
 import tensorlayerx as tlx
 
 
-if __name__ == '__main__':
-    transform = TrOCRTransform(merges_file="./demo/vision/ocr/trocr/merges.txt",
-                               vocab_file="./demo/vision/ocr/trocr/vocab.json", max_length=12)
+if __name__ == "__main__":
+    transform = TrOCRTransform(
+        merges_file="./demo/vision/ocr/trocr/merges.txt",
+        vocab_file="./demo/vision/ocr/trocr/vocab.json",
+        max_length=12,
+    )
 
     model = OpticalCharacterRecognition("trocr")
     model.load_weights("./demo/vision/ocr/trocr/model.npz")
@@ -19,4 +22,3 @@ if __name__ == '__main__':
     predicted_ids = model.generate_one(inputs=inputs, max_length=24)
     transcription = transform.ids_to_string(predicted_ids[0])
     print(transcription)
-

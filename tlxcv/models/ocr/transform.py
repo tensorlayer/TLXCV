@@ -21,41 +21,42 @@ def get_pairs(word):
 
 def bytes_to_unicode():
     bs = (
-        list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
+        list(range(ord("!"), ord("~") + 1))
+        + list(range(ord("¡"), ord("¬") + 1))
+        + list(range(ord("®"), ord("ÿ") + 1))
     )
     cs = bs[:]
     n = 0
-    for b in range(2 ** 8):
+    for b in range(2**8):
         if b not in bs:
             bs.append(b)
-            cs.append(2 ** 8 + n)
+            cs.append(2**8 + n)
             n += 1
     cs = [chr(n) for n in cs]
     return dict(zip(bs, cs))
 
 
 class TrOCRTransform(object):
-
     def __init__(
-            self,
-            vocab_file,
-            merges_file,
-            errors="replace",
-            bos_token="<s>",
-            eos_token="</s>",
-            sep_token="</s>",
-            cls_token="<s>",
-            unk_token="<unk>",
-            pad_token="<pad>",
-            mask_token="<mask>",
-            max_length=512,
-            do_resize=True,
-            size=384,
-            resample=2,
-            do_normalize=True,
-            image_mean=None,
-            image_std=None,
-            **kwargs
+        self,
+        vocab_file,
+        merges_file,
+        errors="replace",
+        bos_token="<s>",
+        eos_token="</s>",
+        sep_token="</s>",
+        cls_token="<s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        mask_token="<mask>",
+        max_length=512,
+        do_resize=True,
+        size=384,
+        resample=2,
+        do_normalize=True,
+        image_mean=None,
+        image_std=None,
+        **kwargs,
     ):
         self.vocab_file = vocab_file
         self.merges_file = merges_file
@@ -76,7 +77,9 @@ class TrOCRTransform(object):
         self.image_mean = image_mean if image_mean is not None else [0.5, 0.5, 0.5]
         self.image_std = image_std if image_std is not None else [0.5, 0.5, 0.5]
 
-        self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+        self.pat = re.compile(
+            r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+        )
         self.cache = {}
 
         with open(self.merges_file, encoding="utf-8") as merges_handle:
@@ -92,9 +95,15 @@ class TrOCRTransform(object):
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
 
         self.errors = "replace"
-        self.special_tokens = [self.bos_token, self.eos_token, self.sep_token,
-                               self.cls_token,
-                               self.unk_token, self.pad_token, self.mask_token]
+        self.special_tokens = [
+            self.bos_token,
+            self.eos_token,
+            self.sep_token,
+            self.cls_token,
+            self.unk_token,
+            self.pad_token,
+            self.mask_token,
+        ]
 
     def resize(self, image, size, resample=PIL.Image.BILINEAR):
         if isinstance(size, int):
@@ -162,7 +171,10 @@ class TrOCRTransform(object):
                 input_id, attention_mask = self.string_to_ids(i, max_length=max_length)
                 input_ids.append(input_id)
                 attention_masks.append(attention_mask)
-            return {"inputs": np.array(input_ids), "attention_mask": np.array(attention_masks)}
+            return {
+                "inputs": np.array(input_ids),
+                "attention_mask": np.array(attention_masks),
+            }
         tokens = self.tokenize(text)
 
         if max_length is None:
@@ -174,12 +186,20 @@ class TrOCRTransform(object):
             else:
                 tokens_length = len(tokens)
                 if tokens_length >= (max_length - 2):
-                    tokens = [self.bos_token] + tokens[:max_length - 2] + [self.eos_token]
+                    tokens = (
+                        [self.bos_token] + tokens[: max_length - 2] + [self.eos_token]
+                    )
                     attention_mask = [1] * len(tokens)
                 else:
-                    attention_mask = [1] * (len(tokens) + 2) + [0] * (max_length - tokens_length - 2)
-                    tokens = [self.bos_token] + tokens + [self.eos_token] + [self.pad_token] * (
-                            max_length - tokens_length - 2)
+                    attention_mask = [1] * (len(tokens) + 2) + [0] * (
+                        max_length - tokens_length - 2
+                    )
+                    tokens = (
+                        [self.bos_token]
+                        + tokens
+                        + [self.eos_token]
+                        + [self.pad_token] * (max_length - tokens_length - 2)
+                    )
 
         ids = self.convert_tokens_to_ids(tokens)
         return {"inputs": np.array(ids), "attention_mask": np.array(attention_mask)}
@@ -205,7 +225,9 @@ class TrOCRTransform(object):
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
-        text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
+        text = bytearray([self.byte_decoder[c] for c in text]).decode(
+            "utf-8", errors=self.errors
+        )
         return text
 
     def convert_tokens_to_ids(self, tokens):
@@ -227,7 +249,9 @@ class TrOCRTransform(object):
         if self.do_resize and self.size is not None:
             image = self.resize(image=image, size=self.size, resample=self.resample)
         if self.do_normalize:
-            image = self.normalize(image=image, mean=self.image_mean, std=self.image_std)
+            image = self.normalize(
+                image=image, mean=self.image_mean, std=self.image_std
+            )
 
         return image
 
