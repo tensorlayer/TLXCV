@@ -31,3 +31,4 @@ from .vision_transformer import (
     VisionTransformer,
 )
 from .efficientnet import efficientnet, EfficientNet
+from .mobilenetv1 import MobileNetV1
