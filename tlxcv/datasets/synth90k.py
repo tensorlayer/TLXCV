@@ -1,8 +1,9 @@
+import random
 import os
 from tensorlayerx.dataflow import Dataset
 
 
-class Synth90kDataset(Dataset):
+class Synth90k(Dataset):
     def __init__(self, archive_path, split="train", transform=None):
         self.archive_path = archive_path
         self.transform = transform
@@ -25,7 +26,13 @@ class Synth90kDataset(Dataset):
         jpg_path = os.path.join(self.archive_path, jpg_index)
 
         if self.transform:
-            image, target = self.transform(jpg_path, text)
+            try:
+                image, target = self.transform(jpg_path, text)
+            except Exception:
+                print('Error data, removing:', self.files[index])
+                del self.files[index]
+                index = random.randrange(0, len(self.files))
+                return self[index]
 
         return image, (target, text)
 

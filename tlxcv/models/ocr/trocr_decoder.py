@@ -1,12 +1,11 @@
-import copy
 import math
 import random
-from .vit import *
-from typing import Optional, Tuple
+from typing import Optional
 
 import tensorlayerx as tlx
-from tensorlayerx import logging
 from tensorlayerx.nn.core import Module
+
+from .vit import shape_list, get_activation
 
 LARGE_NEGATIVE = -1e8
 
@@ -17,10 +16,11 @@ def _make_causal_mask(input_ids_shape, dtype, past_key_values_length=0):
     """
     bsz, tgt_len = input_ids_shape
     mask = tlx.ones((tgt_len, tgt_len)) * LARGE_NEGATIVE
-    mask_cond = tlx.arange(shape_list(mask)[-1])
+    mask_cond = tlx.arange(0, shape_list(mask)[-1])
 
+    zero = tlx.zeros([1], dtype=mask.dtype)
     mask = tlx.where(
-        mask_cond < tlx.reshape(mask_cond + 1, (shape_list(mask)[-1], 1)), 0.0, mask
+        mask_cond < tlx.reshape(mask_cond + 1, (shape_list(mask)[-1], 1)), zero, mask
     )
 
     if past_key_values_length > 0:
@@ -37,11 +37,9 @@ def _expand_mask(mask, dtype, tgt_len=None):
     """
     src_len = shape_list(mask)[1]
     tgt_len = tgt_len if tgt_len is not None else src_len
-    one_cst = tlx.constant(1.0)
-    mask = tlx.cast(mask, dtype=one_cst.dtype)
     expanded_mask = tlx.tile(mask[:, None, None, :], (1, 1, tgt_len, 1))
 
-    return (one_cst - expanded_mask) * LARGE_NEGATIVE
+    return (1.0 - expanded_mask) * LARGE_NEGATIVE
 
 
 class TrOCREmbedding(tlx.nn.Embedding):
@@ -52,7 +50,8 @@ class TrOCREmbedding(tlx.nn.Embedding):
         else:
             first_dims = shape_list(inputs)[:-1]
             x = tlx.reshape(inputs, [-1, self.embedding_size])
-            logits = tlx.matmul(x, self.embeddings, transpose_b=True)
+            embeddings = tlx.transpose(self.embeddings, (0, ...))
+            logits = x @ embeddings
 
             return tlx.reshape(logits, first_dims + [self.vocabulary_size])
 
@@ -104,8 +103,8 @@ class TrOCRSinusoidalPositionalEmbedding(Module):
         """
         half_dim = embedding_dim // 2
         emb = math.log(10000) / (half_dim - 1)
-        emb = tlx.exp(tlx.arange(half_dim, dtype=tlx.float32) * -emb)
-        emb = tlx.arange(num_embeddings, dtype=tlx.float32).unsqueeze(
+        emb = tlx.exp(tlx.arange(0, half_dim, dtype=tlx.float32) * -emb)
+        emb = tlx.arange(0, num_embeddings, dtype=tlx.float32).unsqueeze(
             1
         ) * emb.unsqueeze(0)
         emb = tlx.concat([tlx.sin(emb), tlx.cos(emb)], axis=1).view(num_embeddings, -1)
@@ -264,8 +263,8 @@ class TrOCRAttention(Module):
         value_states = tlx.reshape(value_states, proj_shape)
 
         src_len = shape_list(key_states)[1]
-        # attn_weights = tlx.bmm(query_states, key_states.transpose(1, 2))
-        attn_weights = tlx.matmul(query_states, key_states, transpose_b=True)
+        key_states = tlx.transpose(key_states, (0, 2, 1))
+        attn_weights = query_states @ key_states
 
         if tuple(shape_list(attn_weights)) != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
@@ -301,8 +300,7 @@ class TrOCRAttention(Module):
 
         attn_probs = self.dropout(attn_weights)
 
-        # attn_output = tlx.bmm(attn_probs, value_states)
-        attn_output = tlx.matmul(attn_probs, value_states)
+        attn_output = attn_probs @ value_states
 
         if tuple(shape_list(attn_output)) != (
             bsz * self.num_heads,
@@ -347,7 +345,7 @@ class TrOCRDecoderLayer(Module):
             is_decoder=True,
         )
         self.dropout = tlx.nn.Dropout(dropout)
-        self.activation_fn = ACT2FN[activation_function]
+        self.activation_fn = get_activation(activation_function)
         self.activation_dropout = activation_dropout
 
         self.self_attn_layer_norm = tlx.nn.LayerNorm(normalized_shape=self.embed_dim)
@@ -404,13 +402,7 @@ class TrOCRDecoderLayer(Module):
 
         hidden_states = self.dropout(hidden_states)
         hidden_states = residual + hidden_states
-        # hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states = ln(
-            hidden_states,
-            self.self_attn_layer_norm.layernorm,
-            self.self_attn_layer_norm.gamma,
-            self.self_attn_layer_norm.beta,
-        )
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
         cross_attn_present_key_value = None
@@ -437,13 +429,7 @@ class TrOCRDecoderLayer(Module):
 
             hidden_states = self.dropout(hidden_states)
             hidden_states = residual + hidden_states
-            # hidden_states = self.encoder_attn_layer_norm(hidden_states)
-            hidden_states = ln(
-                hidden_states,
-                self.encoder_attn_layer_norm.layernorm,
-                self.encoder_attn_layer_norm.gamma,
-                self.encoder_attn_layer_norm.beta,
-            )
+            hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # add cross-attn to positions 3,4 of present_key_value tuple
             present_key_value = present_key_value + cross_attn_present_key_value
@@ -456,14 +442,7 @@ class TrOCRDecoderLayer(Module):
 
         hidden_states = self.dropout(hidden_states)
         hidden_states = residual + hidden_states
-        # hidden_states = self.final_layer_norm(hidden_states)
-        hidden_states = ln(
-            hidden_states,
-            self.final_layer_norm.layernorm,
-            self.final_layer_norm.gamma,
-            self.final_layer_norm.beta,
-        )
-
+        hidden_states = self.final_layer_norm(hidden_states)
         outputs = (hidden_states,)
 
         if output_attentions:
@@ -624,13 +603,7 @@ class TrOCRDecoder(Module):
         hidden_states = inputs_embeds + embed_pos
 
         if self.layernorm_embedding is not None:
-            hidden_states = ln(
-                hidden_states,
-                self.layernorm_embedding.layernorm,
-                self.layernorm_embedding.gamma,
-                self.layernorm_embedding.beta,
-            )
-            # hidden_states = self.layernorm_embedding(hidden_states)
+            hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = self.dropout(hidden_states)
 
