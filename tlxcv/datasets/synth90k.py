@@ -3,16 +3,14 @@ from tensorlayerx.dataflow import Dataset
 
 
 class Synth90kDataset(Dataset):
-    def __init__(
-            self, archive_path, split='train', transform=None
-    ):
+    def __init__(self, archive_path, split="train", transform=None):
         self.archive_path = archive_path
         self.transform = transform
 
-        if split == 'train':
-            transcripts_file = os.path.join(archive_path, 'annotation_train.txt')
+        if split == "train":
+            transcripts_file = os.path.join(archive_path, "annotation_train.txt")
         else:
-            transcripts_file = os.path.join(archive_path, 'annotation_test.txt')
+            transcripts_file = os.path.join(archive_path, "annotation_test.txt")
 
         files = []
         for i in open(transcripts_file):

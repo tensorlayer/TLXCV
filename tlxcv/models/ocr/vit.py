@@ -26,7 +26,7 @@ def shape_list(x):
 
 def ln(input, layernorm, gamma, beta):
     input_dtype = input.dtype
-    if input_dtype in ('float16', 'bfloat16'):
+    if input_dtype in ("float16", "bfloat16"):
         input = tlx.cast(input, tlx.float32)
     mean, var = tlx.moments(input, layernorm.axis, keepdims=True)
     scale, offset = layernorm._broadcast(gamma), layernorm._broadcast(beta)
@@ -36,7 +36,9 @@ def ln(input, layernorm, gamma, beta):
         inv *= scale
 
     a = tlx.cast(inv, input.dtype)
-    b = tlx.cast(offset - mean * inv if offset is not None else -mean * inv, input.dtype)
+    b = tlx.cast(
+        offset - mean * inv if offset is not None else -mean * inv, input.dtype
+    )
 
     output = a * input + b
     output = tlx.cast(output, input_dtype)
@@ -49,19 +51,36 @@ class ViTEmbeddings(Module):
 
     """
 
-    def __init__(self, image_size, patch_size, num_channels, hidden_size, initializer_range, hidden_dropout_prob,
-                 name="", **kwargs):
+    def __init__(
+        self,
+        image_size,
+        patch_size,
+        num_channels,
+        hidden_size,
+        initializer_range,
+        hidden_dropout_prob,
+        name="",
+        **kwargs,
+    ):
         super().__init__(name=name, **kwargs)
 
-        self.patch_embeddings = PatchEmbeddings(image_size, patch_size, num_channels, hidden_size, initializer_range,
-                                                name=name + "/patch_embeddings")
+        self.patch_embeddings = PatchEmbeddings(
+            image_size,
+            patch_size,
+            num_channels,
+            hidden_size,
+            initializer_range,
+            name=name + "/patch_embeddings",
+        )
         self.dropout = tlx.nn.Dropout(hidden_dropout_prob)
 
         num_patches = self.patch_embeddings.num_patches
 
         self.cls_token = self._get_weights(
-            shape=(1, 1, hidden_size), init=self.str_to_init("zeros"), trainable=True,
-            var_name="cls_token"
+            shape=(1, 1, hidden_size),
+            init=self.str_to_init("zeros"),
+            trainable=True,
+            var_name="cls_token",
         )
         self.position_embeddings = self._get_weights(
             shape=(1, num_patches + 1, hidden_size),
@@ -93,10 +112,12 @@ class ViTEmbeddings(Module):
         h0 = height // self.patch_size
         w0 = width // self.patch_size
         patch_pos_embed = tlx.resize(
-            tlx.reshape(patch_pos_embed, shape=(1, int(math.sqrt(N)), int(math.sqrt(N)), dim)),
+            tlx.reshape(
+                patch_pos_embed, shape=(1, int(math.sqrt(N)), int(math.sqrt(N)), dim)
+            ),
             output_size=(h0, w0),
             method="bicubic",
-            antialias=False
+            antialias=False,
         )
 
         shape = shape_list(patch_pos_embed)
@@ -104,9 +125,7 @@ class ViTEmbeddings(Module):
         patch_pos_embed = tlx.reshape(tensor=patch_pos_embed, shape=(1, -1, dim))
         return tlx.concat([class_pos_embed, patch_pos_embed], axis=1)
 
-    def forward(
-            self, pixel_values, interpolate_pos_encoding=False
-    ):
+    def forward(self, pixel_values, interpolate_pos_encoding=False):
         batch_size, num_channels, height, width = shape_list(pixel_values)
         embeddings = self.patch_embeddings(
             pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
@@ -118,7 +137,9 @@ class ViTEmbeddings(Module):
 
         # add positional encoding to each token
         if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+            embeddings = embeddings + self.interpolate_pos_encoding(
+                embeddings, height, width
+            )
         else:
             embeddings = embeddings + self.position_embeddings
 
@@ -132,31 +153,41 @@ class PatchEmbeddings(Module):
     Image to Patch Embedding.
     """
 
-    def __init__(self, image_size, patch_size, num_channels, hidden_size, initializer_range, name="", **kwargs):
+    def __init__(
+        self,
+        image_size,
+        patch_size,
+        num_channels,
+        hidden_size,
+        initializer_range,
+        name="",
+        **kwargs,
+    ):
         super().__init__(name=name, **kwargs)
         image_size = to_2tuple(image_size)
         patch_size = to_2tuple(patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_patches = num_patches
         self.num_channels = num_channels
         self.embed_dim = hidden_size
 
-        self.projection = tlx.nn.layers.Conv2d(out_channels=self.embed_dim,
-                                               kernel_size=patch_size,
-                                               stride=self.patch_size,
-                                               padding="valid",
-                                               data_format="channels_last",
-                                               b_init="zeros",
-                                               W_init=get_initializer(initializer_range),
-                                               name=name + "/projection",
-                                               in_channels=3,
-                                               )
+        self.projection = tlx.nn.layers.Conv2d(
+            out_channels=self.embed_dim,
+            kernel_size=patch_size,
+            stride=self.patch_size,
+            padding="valid",
+            data_format="channels_last",
+            b_init="zeros",
+            W_init=get_initializer(initializer_range),
+            name=name + "/projection",
+            in_channels=3,
+        )
 
-    def forward(
-            self, pixel_values, interpolate_pos_encoding=False
-    ):
+    def forward(self, pixel_values, interpolate_pos_encoding=False):
         batch_size, num_channels, height, width = shape_list(pixel_values)
         if not interpolate_pos_encoding:
             if getattr(height, "numpy", None) and getattr(width, "numpy", None):
@@ -179,8 +210,15 @@ class PatchEmbeddings(Module):
 
 
 class ViTSelfAttention(Module):
-    def __init__(self, hidden_size, num_attention_heads, initializer_range, attention_probs_dropout_prob,
-                 name="", **kwargs):
+    def __init__(
+        self,
+        hidden_size,
+        num_attention_heads,
+        initializer_range,
+        attention_probs_dropout_prob,
+        name="",
+        **kwargs,
+    ):
         super().__init__(name=name, **kwargs)
 
         if hidden_size % num_attention_heads != 0:
@@ -195,28 +233,37 @@ class ViTSelfAttention(Module):
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
         self.query = tlx.nn.Linear(
-            out_features=self.all_head_size, W_init=get_initializer(initializer_range), name=name + "/query",
+            out_features=self.all_head_size,
+            W_init=get_initializer(initializer_range),
+            name=name + "/query",
             in_features=hidden_size,
         )
         self.key = tlx.nn.Linear(
-            out_features=self.all_head_size, W_init=get_initializer(initializer_range), name=name + "/key",
+            out_features=self.all_head_size,
+            W_init=get_initializer(initializer_range),
+            name=name + "/key",
             in_features=hidden_size,
         )
         self.value = tlx.nn.Linear(
-            out_features=self.all_head_size, W_init=get_initializer(initializer_range), name=name + "/value",
+            out_features=self.all_head_size,
+            W_init=get_initializer(initializer_range),
+            name=name + "/value",
             in_features=hidden_size,
         )
         self.dropout = tlx.nn.Dropout(attention_probs_dropout_prob)
 
     def transpose_for_scores(self, tensor, batch_size):
-        tensor = tlx.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
+        tensor = tlx.reshape(
+            tensor=tensor,
+            shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size),
+        )
 
         return tlx.transpose(tensor, perm=[0, 2, 1, 3])
 
     def forward(
-            self,
-            hidden_states,
-            head_mask,
+        self,
+        hidden_states,
+        head_mask,
     ):
         batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(hidden_states)
@@ -247,20 +294,25 @@ class ViTSelfAttention(Module):
         attention_output = tlx.transpose(attention_output, perm=[0, 2, 1, 3])
 
         # (batch_size, seq_len_q, all_head_size)
-        attention_output = tlx.reshape(tensor=attention_output, shape=(batch_size, -1, self.all_head_size))
+        attention_output = tlx.reshape(
+            tensor=attention_output, shape=(batch_size, -1, self.all_head_size)
+        )
         outputs = (attention_output, attention_probs)
 
         return outputs
 
 
 class ViTSelfOutput(Module):
-
-    def __init__(self, hidden_size, initializer_range, hidden_dropout_prob, name="", **kwargs):
+    def __init__(
+        self, hidden_size, initializer_range, hidden_dropout_prob, name="", **kwargs
+    ):
         super().__init__(name=name, **kwargs)
 
         self.dense = tlx.nn.Linear(
-            out_features=hidden_size, W_init=get_initializer(initializer_range), name=name + "/dense",
-            in_features=hidden_size
+            out_features=hidden_size,
+            W_init=get_initializer(initializer_range),
+            name=name + "/dense",
+            in_features=hidden_size,
         )
         self.dropout = tlx.nn.Dropout(hidden_dropout_prob)
 
@@ -272,26 +324,39 @@ class ViTSelfOutput(Module):
 
 
 class ViTAttention(Module):
-    def __init__(self, hidden_size, num_attention_heads, initializer_range, attention_probs_dropout_prob,
-                 hidden_dropout_prob, name="", **kwargs):
+    def __init__(
+        self,
+        hidden_size,
+        num_attention_heads,
+        initializer_range,
+        attention_probs_dropout_prob,
+        hidden_dropout_prob,
+        name="",
+        **kwargs,
+    ):
         super().__init__(name=name, **kwargs)
 
-        self.self_attention = ViTSelfAttention(hidden_size, num_attention_heads, initializer_range,
-                                               attention_probs_dropout_prob, name=name + "/attention")
-        self.dense_output = ViTSelfOutput(hidden_size, initializer_range, hidden_dropout_prob, name=name + "/output")
+        self.self_attention = ViTSelfAttention(
+            hidden_size,
+            num_attention_heads,
+            initializer_range,
+            attention_probs_dropout_prob,
+            name=name + "/attention",
+        )
+        self.dense_output = ViTSelfOutput(
+            hidden_size, initializer_range, hidden_dropout_prob, name=name + "/output"
+        )
 
     def forward(
-            self,
-            input_tensor,
-            head_mask,
+        self,
+        input_tensor,
+        head_mask,
     ):
-        self_outputs = self.self_attention(
-            input_tensor, head_mask=head_mask
-        )
-        attention_output = self.dense_output(
-            self_outputs[0], input_tensor=input_tensor
-        )
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        self_outputs = self.self_attention(input_tensor, head_mask=head_mask)
+        attention_output = self.dense_output(self_outputs[0], input_tensor=input_tensor)
+        outputs = (attention_output,) + self_outputs[
+            1:
+        ]  # add attentions if we output them
 
         return outputs
 
@@ -328,15 +393,26 @@ def get_activation(activation_string):
     if activation_string in ACT2FN:
         return ACT2FN[activation_string]
     else:
-        raise KeyError(f"function {activation_string} not found in ACT2FN mapping {list(ACT2FN.keys())}")
+        raise KeyError(
+            f"function {activation_string} not found in ACT2FN mapping {list(ACT2FN.keys())}"
+        )
 
 
 class ViTIntermediate(Module):
-    def __init__(self, intermediate_size, initializer_range, hidden_size, hidden_act, name="", **kwargs):
+    def __init__(
+        self,
+        intermediate_size,
+        initializer_range,
+        hidden_size,
+        hidden_act,
+        name="",
+        **kwargs,
+    ):
         super().__init__(name=name, **kwargs)
 
         self.dense = tlx.nn.Linear(
-            out_features=intermediate_size, W_init=get_initializer(initializer_range),
+            out_features=intermediate_size,
+            W_init=get_initializer(initializer_range),
             name=name + "/dense",
             in_features=hidden_size,
         )
@@ -354,12 +430,22 @@ class ViTIntermediate(Module):
 
 
 class ViTOutput(Module):
-    def __init__(self, hidden_size, initializer_range, intermediate_size, hidden_dropout_prob, name="", **kwargs):
+    def __init__(
+        self,
+        hidden_size,
+        initializer_range,
+        intermediate_size,
+        hidden_dropout_prob,
+        name="",
+        **kwargs,
+    ):
         super().__init__(name=name, **kwargs)
 
         self.dense = tlx.nn.Linear(
-            out_features=hidden_size, W_init=get_initializer(initializer_range), name=name + "/dense",
-            in_features=intermediate_size
+            out_features=hidden_size,
+            W_init=get_initializer(initializer_range),
+            name=name + "/dense",
+            in_features=intermediate_size,
         )
         self.dropout = tlx.nn.Dropout(hidden_dropout_prob)
 
@@ -372,32 +458,68 @@ class ViTOutput(Module):
 
 
 class ViTLayer(Module):
-
-    def __init__(self, hidden_size, num_attention_heads, initializer_range, attention_probs_dropout_prob,
-                 hidden_dropout_prob, intermediate_size, hidden_act, layer_norm_eps, name="", **kwargs):
+    def __init__(
+        self,
+        hidden_size,
+        num_attention_heads,
+        initializer_range,
+        attention_probs_dropout_prob,
+        hidden_dropout_prob,
+        intermediate_size,
+        hidden_act,
+        layer_norm_eps,
+        name="",
+        **kwargs,
+    ):
         super().__init__(name=name, **kwargs)
 
-        self.attention = ViTAttention(hidden_size, num_attention_heads, initializer_range, attention_probs_dropout_prob,
-                                      hidden_dropout_prob, name=name + "/attention")
-        self.intermediate = ViTIntermediate(intermediate_size, initializer_range, hidden_size, hidden_act,
-                                            name=name + "/intermediate")
-        self.vit_output = ViTOutput(hidden_size, initializer_range, intermediate_size, hidden_dropout_prob,
-                                    name=name + "/output")
+        self.attention = ViTAttention(
+            hidden_size,
+            num_attention_heads,
+            initializer_range,
+            attention_probs_dropout_prob,
+            hidden_dropout_prob,
+            name=name + "/attention",
+        )
+        self.intermediate = ViTIntermediate(
+            intermediate_size,
+            initializer_range,
+            hidden_size,
+            hidden_act,
+            name=name + "/intermediate",
+        )
+        self.vit_output = ViTOutput(
+            hidden_size,
+            initializer_range,
+            intermediate_size,
+            hidden_dropout_prob,
+            name=name + "/output",
+        )
 
-        self.layernorm_before = tlx.nn.LayerNorm(normalized_shape=hidden_size,
-                                                 epsilon=layer_norm_eps, name=name + "/layernorm_before")
+        self.layernorm_before = tlx.nn.LayerNorm(
+            normalized_shape=hidden_size,
+            epsilon=layer_norm_eps,
+            name=name + "/layernorm_before",
+        )
         self.layernorm_before.build([None, None, hidden_size])
-        self.layernorm_after = tlx.nn.LayerNorm(normalized_shape=hidden_size,
-                                                epsilon=layer_norm_eps, name=name + "/layernorm_after")
+        self.layernorm_after = tlx.nn.LayerNorm(
+            normalized_shape=hidden_size,
+            epsilon=layer_norm_eps,
+            name=name + "/layernorm_after",
+        )
         self.layernorm_after.build([None, None, hidden_size])
 
     def forward(
-            self,
-            hidden_states,
-            head_mask,
+        self,
+        hidden_states,
+        head_mask,
     ):
-        input_tensor = ln(hidden_states, self.layernorm_before.layernorm,
-                          self.layernorm_before.gamma, self.layernorm_before.beta)
+        input_tensor = ln(
+            hidden_states,
+            self.layernorm_before.layernorm,
+            self.layernorm_before.gamma,
+            self.layernorm_before.beta,
+        )
         attention_outputs = self.attention(
             input_tensor,
             head_mask=head_mask,
@@ -408,35 +530,62 @@ class ViTLayer(Module):
         hidden_states = attention_output + hidden_states
 
         # in ViT, layernorm is also applied after self-attention
-        layer_output = ln(hidden_states, self.layernorm_after.layernorm,
-                          self.layernorm_after.gamma, self.layernorm_after.beta)
+        layer_output = ln(
+            hidden_states,
+            self.layernorm_after.layernorm,
+            self.layernorm_after.gamma,
+            self.layernorm_after.beta,
+        )
 
         intermediate_output = self.intermediate(layer_output)
 
         # second residual connection is done here
-        layer_output = self.vit_output(
-            intermediate_output, input_tensor=hidden_states
-        )
-        outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
+        layer_output = self.vit_output(intermediate_output, input_tensor=hidden_states)
+        outputs = (layer_output,) + attention_outputs[
+            1:
+        ]  # add attentions if we output them
 
         return outputs
 
 
 class ViTEncoder(Module):
-    def __init__(self, hidden_size, num_attention_heads, initializer_range, attention_probs_dropout_prob,
-                 hidden_dropout_prob, intermediate_size, hidden_act, layer_norm_eps, num_hidden_layers,
-                 name="", **kwargs):
+    def __init__(
+        self,
+        hidden_size,
+        num_attention_heads,
+        initializer_range,
+        attention_probs_dropout_prob,
+        hidden_dropout_prob,
+        intermediate_size,
+        hidden_act,
+        layer_norm_eps,
+        num_hidden_layers,
+        name="",
+        **kwargs,
+    ):
         super().__init__(name=name, **kwargs)
 
         self.layer = tlx.nn.ModuleList(
-            [ViTLayer(hidden_size, num_attention_heads, initializer_range, attention_probs_dropout_prob,
-                      hidden_dropout_prob, intermediate_size, hidden_act, layer_norm_eps, name=name + f"/layer_._{i}")
-             for i in range(num_hidden_layers)])
+            [
+                ViTLayer(
+                    hidden_size,
+                    num_attention_heads,
+                    initializer_range,
+                    attention_probs_dropout_prob,
+                    hidden_dropout_prob,
+                    intermediate_size,
+                    hidden_act,
+                    layer_norm_eps,
+                    name=name + f"/layer_._{i}",
+                )
+                for i in range(num_hidden_layers)
+            ]
+        )
 
     def forward(
-            self,
-            hidden_states,
-            head_mask,
+        self,
+        hidden_states,
+        head_mask,
     ):
         all_hidden_states = ()
 
@@ -456,28 +605,65 @@ class ViTEncoder(Module):
 
 
 class ViTMainLayer(Module):
-
-    def __init__(self, image_size, patch_size, num_channels, hidden_size, initializer_range, hidden_dropout_prob,
-                 num_attention_heads, attention_probs_dropout_prob, intermediate_size, hidden_act, layer_norm_eps,
-                 num_hidden_layers, add_pooling_layer=True, name="", **kwargs):
+    def __init__(
+        self,
+        image_size,
+        patch_size,
+        num_channels,
+        hidden_size,
+        initializer_range,
+        hidden_dropout_prob,
+        num_attention_heads,
+        attention_probs_dropout_prob,
+        intermediate_size,
+        hidden_act,
+        layer_norm_eps,
+        num_hidden_layers,
+        add_pooling_layer=True,
+        name="",
+        **kwargs,
+    ):
         super().__init__(name=name, **kwargs)
 
-        self.embeddings = ViTEmbeddings(image_size, patch_size, num_channels, hidden_size, initializer_range,
-                                        hidden_dropout_prob, name=name + "/embeddings")
-        self.encoder = ViTEncoder(hidden_size, num_attention_heads, initializer_range, attention_probs_dropout_prob,
-                                  hidden_dropout_prob, intermediate_size, hidden_act, layer_norm_eps, num_hidden_layers,
-                                  name=name + "/encoder")
-        self.layernorm = tlx.nn.LayerNorm(normalized_shape=hidden_size,
-                                          epsilon=layer_norm_eps, name=name + "/layernorm")
+        self.embeddings = ViTEmbeddings(
+            image_size,
+            patch_size,
+            num_channels,
+            hidden_size,
+            initializer_range,
+            hidden_dropout_prob,
+            name=name + "/embeddings",
+        )
+        self.encoder = ViTEncoder(
+            hidden_size,
+            num_attention_heads,
+            initializer_range,
+            attention_probs_dropout_prob,
+            hidden_dropout_prob,
+            intermediate_size,
+            hidden_act,
+            layer_norm_eps,
+            num_hidden_layers,
+            name=name + "/encoder",
+        )
+        self.layernorm = tlx.nn.LayerNorm(
+            normalized_shape=hidden_size,
+            epsilon=layer_norm_eps,
+            name=name + "/layernorm",
+        )
         self.layernorm.build([None, None, hidden_size])
-        self.pooler = ViTPooler(hidden_size, initializer_range, name=name + "/pooler") if add_pooling_layer else None
+        self.pooler = (
+            ViTPooler(hidden_size, initializer_range, name=name + "/pooler")
+            if add_pooling_layer
+            else None
+        )
         self.num_hidden_layers = num_hidden_layers
 
     def forward(
-            self,
-            pixel_values,
-            interpolate_pos_encoding: Optional[bool] = None,
-            **kwargs,
+        self,
+        pixel_values,
+        interpolate_pos_encoding: Optional[bool] = None,
+        **kwargs,
     ):
         embedding_output = self.embeddings(
             pixel_values,
@@ -492,29 +678,63 @@ class ViTMainLayer(Module):
         )
 
         sequence_output = encoder_outputs[0]
-        sequence_output = ln(sequence_output, self.layernorm.layernorm, self.layernorm.gamma, self.layernorm.beta)
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        sequence_output = ln(
+            sequence_output,
+            self.layernorm.layernorm,
+            self.layernorm.gamma,
+            self.layernorm.beta,
+        )
+        pooled_output = (
+            self.pooler(sequence_output) if self.pooler is not None else None
+        )
 
         return (sequence_output, pooled_output) + encoder_outputs[1:]
 
 
 class ViTModel(Module):
-    def __init__(self, image_size, patch_size, num_channels, hidden_size, initializer_range, hidden_dropout_prob,
-                 num_attention_heads, attention_probs_dropout_prob, intermediate_size, hidden_act, layer_norm_eps,
-                 num_hidden_layers, *inputs, add_pooling_layer=True, name="", **kwargs):
+    def __init__(
+        self,
+        image_size,
+        patch_size,
+        num_channels,
+        hidden_size,
+        initializer_range,
+        hidden_dropout_prob,
+        num_attention_heads,
+        attention_probs_dropout_prob,
+        intermediate_size,
+        hidden_act,
+        layer_norm_eps,
+        num_hidden_layers,
+        *inputs,
+        add_pooling_layer=True,
+        name="",
+        **kwargs,
+    ):
         super().__init__(name=name, *inputs, **kwargs)
 
-        self.vit = ViTMainLayer(image_size, patch_size, num_channels, hidden_size, initializer_range,
-                                hidden_dropout_prob,
-                                num_attention_heads, attention_probs_dropout_prob, intermediate_size, hidden_act,
-                                layer_norm_eps,
-                                num_hidden_layers, add_pooling_layer=add_pooling_layer, name="vit")
+        self.vit = ViTMainLayer(
+            image_size,
+            patch_size,
+            num_channels,
+            hidden_size,
+            initializer_range,
+            hidden_dropout_prob,
+            num_attention_heads,
+            attention_probs_dropout_prob,
+            intermediate_size,
+            hidden_act,
+            layer_norm_eps,
+            num_hidden_layers,
+            add_pooling_layer=add_pooling_layer,
+            name="vit",
+        )
 
     def forward(
-            self,
-            pixel_values,
-            interpolate_pos_encoding=None,
-            **kwargs,
+        self,
+        pixel_values,
+        interpolate_pos_encoding=None,
+        **kwargs,
     ):
         outputs = self.vit(
             pixel_values,
