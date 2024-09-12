@@ -11,6 +11,7 @@ class Circles(VisionDataset):
         num: int,
         nx: int = 172,
         ny: int = 172,
+        nc: int = 1,
         transforms: Optional[Callable] = None,
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None
@@ -19,9 +20,10 @@ class Circles(VisionDataset):
         self.num = num
         self.nx = nx
         self.ny = ny
+        self.nc = nc
 
     def __getitem__(self, index: int) -> Tuple[Any, Any]:
-        image, label = _create_image_and_mask(self.nx, self.ny)
+        image, label = _create_image_and_mask(self.nx, self.ny, self.nc)
         image = image.astype(np.float32)
         label = label.astype(np.float32)
         if self.transforms:
@@ -32,7 +34,7 @@ class Circles(VisionDataset):
         return self.num
 
 
-def _create_image_and_mask(nx, ny, cnt=10, r_min=3, r_max=10, border=32, sigma=20):
+def _create_image_and_mask(nx, ny, nc, cnt=10, r_min=3, r_max=10, border=32, sigma=20):
     image = np.ones((nx, ny, 1))
     mask = np.zeros((nx, ny), dtype=np.bool)
 
@@ -51,6 +53,7 @@ def _create_image_and_mask(nx, ny, cnt=10, r_min=3, r_max=10, border=32, sigma=2
     image += np.random.normal(scale=sigma, size=image.shape)
     image -= np.amin(image)
     image /= np.amax(image)
+    image = np.concatenate([image] * nc, axis=-1)
     mask = np.stack([~mask, mask], axis=-1)
 
     return image, mask
