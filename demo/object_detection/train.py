@@ -16,10 +16,10 @@ import numpy as np
 import tensorlayerx as tlx
 from tensorlayerx.dataflow import DataLoader
 from tensorlayerx.vision.transforms import Compose
-from transforms import LabelFormatConvert, Normalize, Resize, ToTensor
+from transforms import LabelFormatConvert, Normalize, Resize, ToTensor, PadGTSingle
 
 from tlxcv.datasets import CocoDetection
-from tlxcv.models import Detr, YOLOv3, SSD
+from tlxcv.models import Detr, YOLOv3, SSD, ppyoloe
 from tlxcv.tasks import ObjectDetection
 
 
@@ -104,9 +104,12 @@ if __name__ == "__main__":
     transforms = Compose(
         [
             LabelFormatConvert(),
-            Resize(size=600, max_size=800, auto_divide=32),
+            # Resize(size=800, max_size=1333),                                  # Detr
+            Resize(size=600, max_size=800, auto_divide=32),                     # YOLOv3/SSD
+            # Resize(size=(640, 640), max_size=640),                            # ppyoloe
             Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ToTensor(data_format=data_format_short),
+            # PadGTSingle(num_max_boxes=200)                                    # ppyoloe
         ]
     )
     train_dataset = CocoDetection(
@@ -118,7 +121,7 @@ if __name__ == "__main__":
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=2,
-        collate_fn=partial(collate_fn, data_format=data_format),
+        collate_fn=partial(collate_fn, data_format=data_format),                # Detr/YOLOv3/SSD
     )
     test_dataset = CocoDetection(
         root="./data/coco2017",
@@ -129,12 +132,13 @@ if __name__ == "__main__":
     test_dataloader = DataLoader(
         test_dataset,
         batch_size=2,
-        collate_fn=partial(collate_fn, data_format=data_format),
+        collate_fn=partial(collate_fn, data_format=data_format),                # Detr/YOLOv3/SSD
     )
 
     # backbone = Detr(data_format=data_format)
     # backbone = YOLOv3(data_format=data_format)
     backbone = SSD(data_format=data_format)
+    # backbone = ppyoloe("ppyoloe_s", num_classes=80, data_format=data_format)
     model = ObjectDetection(backbone=backbone)
 
     optimizer = tlx.optimizers.Adam(lr=1e-6)

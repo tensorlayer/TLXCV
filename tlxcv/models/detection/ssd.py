@@ -308,12 +308,12 @@ class SSDHead(nn.Module):
         for feat, box_conv, score_conv in zip(feats, self.box_convs, self.score_convs):
             b = feat.shape[0]
             box_pred = box_conv(feat)
-            box_pred = tlx.transpose(box_pred, [0, 2, 3, 1]).reshape([b, -1, 4])
+            box_pred = tlx.reshape(tlx.transpose(box_pred, [0, 2, 3, 1]), [b, -1, 4])
             box_preds.append(box_pred)
 
             cls_score = score_conv(feat)
             nc = self.num_classes
-            cls_score = tlx.transpose(cls_score, [0, 2, 3, 1]).reshape([b, -1, nc])
+            cls_score = tlx.reshape(tlx.transpose(cls_score, [0, 2, 3, 1]), [b, -1, nc])
             cls_scores.append(cls_score)
         prior_boxes = self.anchor_generator(feats, image)
         if gt_bbox is not None and gt_class is not None:
@@ -418,7 +418,7 @@ class SSDLoss(nn.Module):
             bg_index (int): Background class index
         """
         batch_size, num_priors = gt_bbox.shape[0], prior_boxes.shape[0]
-        ious = iou_similarity(gt_bbox.reshape((-1, 4)), prior_boxes).reshape(
+        ious = tlx.reshape(iou_similarity(tlx.reshape(gt_bbox, (-1, 4)), prior_boxes),
             (batch_size, -1, num_priors)
         )
         prior_max_iou, prior_argmax_iou = ious.max(axis=1), ious.argmax(axis=1)
@@ -441,19 +441,19 @@ class SSDLoss(nn.Module):
         )
         batch_ind = (batch_ind * num_priors + gt_argmax_iou).flatten()
         targets_bbox = tlx.scatter_update(
-            targets_bbox.reshape([-1, 4]), batch_ind, gt_bbox.reshape([-1, 4])
+            tlx.reshape(targets_bbox, [-1, 4]), batch_ind, tlx.reshape(gt_bbox, [-1, 4])
         ).reshape([batch_size, -1, 4])
-        targets_label = tlx.scatter_update(
-            targets_label.reshape([-1, 1]), batch_ind, gt_label.reshape([-1, 1])
-        ).reshape([batch_size, -1, 1])
+        targets_label = tlx.reshape(tlx.scatter_update(
+            tlx.reshape(targets_label, [-1, 1]), batch_ind, tlx.reshape(gt_label, [-1, 1])
+        ), [batch_size, -1, 1])
         targets_label[:, :1] = bg_index
         prior_boxes = prior_boxes.unsqueeze(0).tile([batch_size, 1, 1])
         targets_bbox = bbox2delta(
-            prior_boxes.reshape([-1, 4]),
-            targets_bbox.reshape([-1, 4]),
+            tlx.reshape(prior_boxes, [-1, 4]),
+            tlx.reshape(targets_bbox, [-1, 4]),
             self.prior_box_var,
         )
-        targets_bbox = targets_bbox.reshape([batch_size, -1, 4])
+        targets_bbox = tlx.reshape(targets_bbox, [batch_size, -1, 4])
         return targets_bbox, targets_label
 
     def _mine_hard_example(

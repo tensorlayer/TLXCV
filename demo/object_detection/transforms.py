@@ -244,6 +244,56 @@ class ToTensor(object):
         return to_tensor(image, self.data_format), label
 
 
+class PadGTSingle(object):
+    def __init__(self, num_max_boxes=200, return_gt_mask=True):
+        self.num_max_boxes = num_max_boxes
+        self.return_gt_mask = return_gt_mask
+
+    def __call__(self, data):
+        im, sample = data
+        num_max_boxes = self.num_max_boxes
+        if self.return_gt_mask:
+            sample['pad_gt_mask'] = np.zeros(
+                (num_max_boxes, 1), dtype=np.float32)
+        if num_max_boxes != 0:
+            num_gt = len(sample['boxes'])
+            num_gt = min(num_gt, num_max_boxes)
+            pad_gt_class = np.zeros((num_max_boxes, 1), dtype=np.int32)
+            pad_gt_bbox = np.zeros((num_max_boxes, 4), dtype=np.float32)
+            if num_gt > 0:
+                pad_gt_class[:num_gt, 0] = sample['class_labels'][:num_gt]
+                pad_gt_bbox[:num_gt] = sample['boxes'][:num_gt]
+            sample['class_labels'] = pad_gt_class
+            sample['boxes'] = pad_gt_bbox
+            # pad_gt_mask
+            if 'pad_gt_mask' in sample:
+                sample['pad_gt_mask'][:num_gt] = 1
+            # gt_score
+            if 'gt_score' in sample:
+                pad_gt_score = np.zeros((num_max_boxes, 1), dtype=np.float32)
+                if num_gt > 0:
+                    pad_gt_score[:num_gt, 0] = sample['gt_score'][:num_gt]
+                sample['gt_score'] = pad_gt_score
+            if 'iscrowd' in sample:
+                pad_is_crowd = np.zeros((num_max_boxes, 1), dtype=np.int32)
+                if num_gt > 0:
+                    pad_is_crowd[:num_gt, 0] = sample['iscrowd'][:num_gt]
+                sample['iscrowd'] = pad_is_crowd
+            if 'difficult' in sample:
+                pad_diff = np.zeros((num_max_boxes, 1), dtype=np.int32)
+                if num_gt > 0:
+                    pad_diff[:num_gt, 0] = sample['difficult'][:num_gt]
+                sample['difficult'] = pad_diff
+        del sample['masks']
+        del sample['orig_size']
+        del sample['size']
+        del sample['im_shape']
+        del sample['scale_factor']
+        del sample['area']
+        return im, sample
+
+
+
 def make_divided(x, divided=8):
     if divided:
         d = x % divided
