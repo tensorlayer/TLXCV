@@ -639,8 +639,8 @@ class Gt2YoloTarget(object):
                         if iou > best_iou:
                             best_iou = iou
                             best_idx = an_idx
-                    gi = round(gx * grid_w)
-                    gj = round(gy * grid_h)
+                    gi = round(gx * (grid_w - 1))
+                    gj = round(gy * (grid_h - 1))
                     if best_idx in mask:
                         best_n = mask.index(best_idx)
                         ax, ay = self.anchors[best_idx]
