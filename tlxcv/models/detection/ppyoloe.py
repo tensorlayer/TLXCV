@@ -18,10 +18,11 @@ class PPYOLOE(nn.Module):
     def forward(self, x, scale_factor=None):
         body_feats = self.backbone(x)
         fpn_feats = self.neck(body_feats)
-        out = self.head(fpn_feats)
         if self.is_train or scale_factor is None:
+            out = self.head(fpn_feats)
             return out
         else:
+            out = self.head(fpn_feats, is_train=False)
             out = self.head.post_process(out, scale_factor)
             return out
 
@@ -733,12 +734,12 @@ class PPYOLOEHead(nn.Module):
 
         return cls_score_list, reg_dist_list, anchor_points, stride_tensor
 
-    def forward(self, feats):
+    def forward(self, feats, is_train=True):
         assert len(feats) == len(
             self.fpn_strides
         ), "The size of feats is not equal to size of fpn_strides"
 
-        if self.is_train:
+        if is_train:
             return self.forward_train(feats)
         else:
             return self.forward_eval(feats)
