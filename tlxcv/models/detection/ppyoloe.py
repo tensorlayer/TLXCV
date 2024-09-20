@@ -19,7 +19,7 @@ class PPYOLOE(nn.Module):
         body_feats = self.backbone(x)
         fpn_feats = self.neck(body_feats)
         out = self.head(fpn_feats)
-        if self.is_train:
+        if self.is_train or scale_factor is None:
             return out
         else:
             out = self.head.post_process(out, scale_factor)
