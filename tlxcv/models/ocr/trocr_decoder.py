@@ -38,6 +38,7 @@ def _expand_mask(mask, dtype, tgt_len=None):
     src_len = shape_list(mask)[1]
     tgt_len = tgt_len if tgt_len is not None else src_len
     expanded_mask = tlx.tile(mask[:, None, None, :], (1, 1, tgt_len, 1))
+    expanded_mask = tlx.cast(expanded_mask, dtype)
 
     return (1.0 - expanded_mask) * LARGE_NEGATIVE
 

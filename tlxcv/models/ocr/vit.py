@@ -495,8 +495,7 @@ class ViTEncoder(nn.Module):
     ):
         super().__init__(name=name, **kwargs)
 
-        self.layers = nn.ModuleList(
-            [
+        self.layers = [
                 ViTLayer(
                     hidden_size,
                     num_attention_heads,
@@ -510,7 +509,6 @@ class ViTEncoder(nn.Module):
                 )
                 for i in range(num_hidden_layers)
             ]
-        )
 
     def forward(
         self,
