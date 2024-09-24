@@ -152,8 +152,8 @@ class InceptionI3d(nn.Module):
         self.data_format_3d = 'NCDHW' if data_format == 'channels_first' else 'NDHWC'
         self.axis = 2 if self.data_format == 'channels_first' else 1
 
-        self.layers = nn.Sequential()
-        self.layers.append(Unit3D(
+        self.i3d_layers = nn.Sequential()
+        self.i3d_layers.append(Unit3D(
             in_channels=in_channels,
             output_channels=64,
             kernel_shape=[7, 7, 7],
@@ -163,7 +163,7 @@ class InceptionI3d(nn.Module):
             name=name + '/Conv3d_1a_7x7',
         ))
 
-        self.layers.append(nn.MaxPool3d(
+        self.i3d_layers.append(nn.MaxPool3d(
             kernel_size=[1, 3, 3],
             stride=(1, 2, 2),
             padding='SAME',
@@ -171,7 +171,7 @@ class InceptionI3d(nn.Module):
             name=name + '/MaxPool3d_2a_3x3',
         ))
 
-        self.layers.append(Unit3D(
+        self.i3d_layers.append(Unit3D(
             in_channels=64,
             output_channels=64,
             kernel_shape=[1, 1, 1],
@@ -180,7 +180,7 @@ class InceptionI3d(nn.Module):
             name=name + '/Conv3d_2b_1x1',
         ))
 
-        self.layers.append(Unit3D(
+        self.i3d_layers.append(Unit3D(
             in_channels=64,
             output_channels=192,
             kernel_shape=[3, 3, 3],
@@ -189,7 +189,7 @@ class InceptionI3d(nn.Module):
             name=name + '/Conv3d_2c_3x3',
         ))
 
-        self.layers.append(nn.MaxPool3d(
+        self.i3d_layers.append(nn.MaxPool3d(
             kernel_size=[1, 3, 3],
             stride=(1, 2, 2),
             padding='SAME',
@@ -197,21 +197,21 @@ class InceptionI3d(nn.Module):
             name=name + '/MaxPool3d_3a_3x3',
         ))
 
-        self.layers.append(InceptionModule(
+        self.i3d_layers.append(InceptionModule(
             192,
             [64, 96, 128, 16, 32, 32],
             data_format=data_format,
             name=name + '/Mixed_3b'
         ))
 
-        self.layers.append(InceptionModule(
+        self.i3d_layers.append(InceptionModule(
             256,
             [128, 128, 192, 32, 96, 64],
             data_format=data_format,
             name=name + '/Mixed_3c'
         ))
 
-        self.layers.append(nn.MaxPool3d(
+        self.i3d_layers.append(nn.MaxPool3d(
             kernel_size=[3, 3, 3],
             stride=(2, 2, 2),
             padding='SAME',
@@ -219,42 +219,42 @@ class InceptionI3d(nn.Module):
             name=name + '/MaxPool3d_4a_3x3',
         ))
 
-        self.layers.append(InceptionModule(
+        self.i3d_layers.append(InceptionModule(
             128 + 192 + 96 + 64,
             [192, 96, 208, 16, 48, 64],
             data_format=data_format,
             name=name + '/Mixed_4b'
         ))
 
-        self.layers.append(InceptionModule(
+        self.i3d_layers.append(InceptionModule(
             192 + 208 + 48 + 64,
             [160, 112, 224, 24, 64, 64],
             data_format=data_format,
             name=name + '/Mixed_4c'
         ))
 
-        self.layers.append(InceptionModule(
+        self.i3d_layers.append(InceptionModule(
             160 + 224 + 64 + 64,
             [128, 128, 256, 24, 64, 64],
             data_format=data_format,
             name=name + '/Mixed_4d'
         ))
 
-        self.layers.append(InceptionModule(
+        self.i3d_layers.append(InceptionModule(
             128 + 256 + 64 + 64,
             [112, 144, 288, 32, 64, 64],
             data_format=data_format,
             name=name + '/Mixed_4e'
         ))
 
-        self.layers.append(InceptionModule(
+        self.i3d_layers.append(InceptionModule(
             112 + 288 + 64 + 64,
             [256, 160, 320, 32, 128, 128],
             data_format=data_format,
             name=name + '/Mixed_4f'
         ))
 
-        self.layers.append(nn.MaxPool3d(
+        self.i3d_layers.append(nn.MaxPool3d(
             kernel_size=[2, 2, 2],
             stride=(2, 2, 2),
             padding='SAME',
@@ -262,14 +262,14 @@ class InceptionI3d(nn.Module):
             name=name + '/MaxPool3d_5a_2x2',
         ))
 
-        self.layers.append(InceptionModule(
+        self.i3d_layers.append(InceptionModule(
             256 + 320 + 128 + 128,
             [256, 160, 320, 32, 128, 128],
             data_format=data_format,
             name=name + '/Mixed_5b'
         ))
 
-        self.layers.append(InceptionModule(
+        self.i3d_layers.append(InceptionModule(
             256 + 320 + 128 + 128,
             [384, 192, 384, 48, 128, 128],
             data_format=data_format,
@@ -296,12 +296,13 @@ class InceptionI3d(nn.Module):
 
     def forward(self, x):
         d = tlx.get_tensor_shape(x)[self.axis]
-        x = self.layers(x)
+        x = self.i3d_layers(x)
 
         x = self.logits(self.dropout(self.avg_pool(x)))
         x = tlx.ops.interpolate(
             x,
             (d, 1, 1),
+            mode='TRILINEAR',
             data_format=self.data_format_3d
         )
         logits = tlx.squeeze(x, (1, 2, 3, 4))
