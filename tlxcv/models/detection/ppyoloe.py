@@ -718,10 +718,10 @@ class PPYOLOEHead(nn.Module):
             reg_dist = tlx.ops.conv2d(
                 reg_dist,
                 self.proj_conv,
-                strides=(1, 1, 1, 1),
-                padding=(0, 0, 0, 0),
+                strides=(1, 1),
+                padding=(0, 0),
                 data_format="NCHW",
-                dilations=(1, 1, 1, 1),
+                dilations=(1, 1),
             )
             # cls and reg
             cls_score = tlx.sigmoid(cls_logit)
