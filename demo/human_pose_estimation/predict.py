@@ -18,15 +18,35 @@ from tlxcv.models.human_pose_estimation import PoseHighResolutionNet
 from tlxcv.tasks.human_pose_estimation import HumanPoseEstimation, inference
 
 
-if __name__ == '__main__':
+def device_info():
+    found = False
+    if not found and os.system("npu-smi info > /dev/null 2>&1") == 0:
+        cmd = "npu-smi info"
+        found = True
+    elif not found and os.system("nvidia-smi > /dev/null 2>&1") == 0:
+        cmd = "nvidia-smi"
+        found = True
+    elif not found and os.system("ixsmi > /dev/null 2>&1") == 0:
+        cmd = "ixsmi"
+        found = True
+    elif not found and os.system("cnmon > /dev/null 2>&1") == 0:
+        cmd = "cnmon"
+        found = True
+    
+    os.system(cmd)
+    cmd = "lscpu"
+    os.system(cmd)
+    
+if __name__ == "__main__":
+    device_info()
     tlx.set_device('GPU')
 
     backbone = PoseHighResolutionNet(data_format=data_format)
     model = HumanPoseEstimation(backbone)
-    model.load_weights("./demo/human_pose_estimation/model.npz")
+    model.load_weights("model.npz")
     model.set_eval()
 
-    path = "./demo/human_pose_estimation/hrnet.jpg"
+    path = "hrnet.jpg"
     image = load_image(path)
     height, width = image.shape[:2]
 
@@ -45,4 +65,5 @@ if __name__ == '__main__':
         original_image_size=[height, width],
         data_format=data_format
     )
-    save_image(image, 'result.jpg', './demo/human_pose_estimation/')
+    print(image)
+    save_image(image, 'result.jpg', './')

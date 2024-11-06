@@ -20,7 +20,27 @@ from tlxcv.tasks.human_pose_estimation import (EpochDecay, HumanPoseEstimation,
                                                Trainer)
 
 
-if __name__ == '__main__':
+def device_info():
+    found = False
+    if not found and os.system("npu-smi info > /dev/null 2>&1") == 0:
+        cmd = "npu-smi info"
+        found = True
+    elif not found and os.system("nvidia-smi > /dev/null 2>&1") == 0:
+        cmd = "nvidia-smi"
+        found = True
+    elif not found and os.system("ixsmi > /dev/null 2>&1") == 0:
+        cmd = "ixsmi"
+        found = True
+    elif not found and os.system("cnmon > /dev/null 2>&1") == 0:
+        cmd = "cnmon"
+        found = True
+    
+    os.system(cmd)
+    cmd = "lscpu"
+    os.system(cmd)
+    
+if __name__ == "__main__":
+    device_info()
     tlx.set_device()
 
     transforms = Compose([
@@ -32,14 +52,14 @@ if __name__ == '__main__':
         ToTensor(data_format=data_format_short)
     ])
     train_dataset = CocoHumanPoseEstimation(
-        root='./data/coco2017',
+        root='../object_detection/coco',
         split='train',
         transforms=transforms
     )
     train_dataloader = DataLoader(train_dataset, batch_size=16)
     test_dataset = CocoHumanPoseEstimation(
-        root='./data/coco2017',
-        split='test',
+        root='../object_detection/coco',
+        split='train',
         transforms=transforms
     )
     test_dataloader = DataLoader(test_dataset, batch_size=16)
@@ -65,4 +85,4 @@ if __name__ == '__main__':
         print_freq=1, print_train_batch=True
         )
 
-    model.save_weights("./demo/human_pose_estimation/model.npz")
+    model.save_weights("model.npz")

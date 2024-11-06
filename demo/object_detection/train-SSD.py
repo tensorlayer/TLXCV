@@ -5,8 +5,8 @@ import os
 os.environ["TL_BACKEND"] = "paddle"
 # os.environ["TL_BACKEND"] = "tensorflow"
 
-data_format = "channels_first"
-data_format_short = "CHW"
+# data_format = "channels_first"
+# data_format_short = "CHW"
 data_format = "channels_last"
 data_format_short = "HWC"
 
@@ -99,21 +99,41 @@ class EmptyMetric(object):
         return
 
 
+def device_info():
+    found = False
+    if not found and os.system("npu-smi info > /dev/null 2>&1") == 0:
+        cmd = "npu-smi info"
+        found = True
+    elif not found and os.system("nvidia-smi > /dev/null 2>&1") == 0:
+        cmd = "nvidia-smi"
+        found = True
+    elif not found and os.system("ixsmi > /dev/null 2>&1") == 0:
+        cmd = "ixsmi"
+        found = True
+    elif not found and os.system("cnmon > /dev/null 2>&1") == 0:
+        cmd = "cnmon"
+        found = True
+    
+    os.system(cmd)
+    cmd = "lscpu"
+    os.system(cmd)
+    
 if __name__ == "__main__":
+    device_info()
     # tlx.set_device('GPU')
     transforms = Compose(
         [
             LabelFormatConvert(),
-            # Resize(size=800, max_size=1333),                                  # Detr
+            Resize(size=800, max_size=1333),                                  # Detr
             # Resize(size=600, max_size=800, auto_divide=32),                     # YOLOv3/SSD
-            Resize(size=(640, 640), max_size=640),                            # ppyoloe
+            # Resize(size=(640, 640), max_size=640),                            # ppyoloe
             Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ToTensor(data_format=data_format_short),
-            PadGTSingle(num_max_boxes=200)                                    # ppyoloe
+            # PadGTSingle(num_max_boxes=200)                                    # ppyoloe
         ]
     )
     train_dataset = CocoDetection(
-        root="./data/coco2017",
+        root="./coco/",
         split="train",
         transforms=transforms,
         image_format="opencv",
@@ -121,24 +141,24 @@ if __name__ == "__main__":
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=2,
-        # collate_fn=partial(collate_fn, data_format=data_format),                # Detr/YOLOv3/SSD
+        collate_fn=partial(collate_fn, data_format=data_format),                # Detr/YOLOv3/SSD
     )
     test_dataset = CocoDetection(
-        root="./data/coco2017",
-        split="test",
+        root="./coco/",
+        split="train",
         transforms=transforms,
         image_format="opencv",
     )
     test_dataloader = DataLoader(
         test_dataset,
         batch_size=2,
-        # collate_fn=partial(collate_fn, data_format=data_format),                # Detr/YOLOv3/SSD
+        collate_fn=partial(collate_fn, data_format=data_format),                # Detr/YOLOv3/SSD
     )
 
     # backbone = Detr(data_format=data_format)
     # backbone = YOLOv3(data_format=data_format)
-    # backbone = SSD(data_format=data_format)
-    backbone = ppyoloe("ppyoloe_s", num_classes=80, data_format=data_format)
+    backbone = SSD(data_format=data_format)
+    # backbone = ppyoloe("ppyoloe_s", num_classes=80, data_format=data_format)
     model = ObjectDetection(backbone=backbone)
 
     optimizer = tlx.optimizers.Adam(lr=1e-6)
@@ -155,4 +175,4 @@ if __name__ == "__main__":
         print_train_batch=False,
     )
 
-    model.save_weights("./demo/object_detection/model.npz")
+    model.save_weights("model.npz")

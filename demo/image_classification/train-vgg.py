@@ -1,16 +1,15 @@
 import os
-# NOTE: need to set backend before `import tensorlayerx`
 # os.environ["TL_BACKEND"] = "torch"
-os.environ['TL_BACKEND'] = 'paddle'
-# os.environ["TL_BACKEND"] = "tensorflow"
+# os.environ['TL_BACKEND'] = 'paddle'
+os.environ["TL_BACKEND"] = "tensorflow"
+
 import tensorlayerx as tlx
 from tensorlayerx.dataflow import DataLoader
-from tensorlayerx.vision.transforms import (Compose, RandomCrop,
-                                            RandomFlipHorizontal)
+from tensorlayerx.vision.transforms import Compose, Normalize, Resize, ToTensor
 
-from tlxcv.datasets import Charades
-from tlxcv.models import InceptionI3d
-from tlxcv.tasks import VideoClassification
+from tlxcv.datasets import Cifar10 
+from tlxcv.models import vgg19
+from tlxcv.tasks import ImageClassification
 
 def device_info():
     found = False
@@ -31,38 +30,36 @@ def device_info():
     cmd = "lscpu"
     os.system(cmd)
     
-if __name__ == "__main__":
+if __name__ == '__main__':
     device_info()
     if tlx.BACKEND == 'tensorflow':
         data_format = 'channels_last'
+        data_format_short = 'HWC'
     else:
         data_format = 'channels_first'
+        data_format_short = 'CHW'
 
     transform = Compose([
-        RandomCrop((224, 224)),
-        RandomFlipHorizontal(),
+        Resize((224, 224)),
+        Normalize(mean=(125.31, 122.95, 113.86), std=(62.99, 62.09, 66.70)),
+        ToTensor(data_format=data_format_short)
     ])
-    train_dataset = Charades(
-        root='/home/aistudio-user/userdata/tlxzoo/Charades',
-        mode='rgb',
+    train_dataset = Cifar10(
+        root='./data/cifar10',
         split='train',
-        frame_num=16,
-        data_format=data_format,
         transform=transform
     )
     train_dataloader = DataLoader(train_dataset, batch_size=16)
-    test_dataset = Charades(
-        root='/home/aistudio-user/userdata/tlxzoo/Charades',
-        mode='rgb',
+    test_dataset = Cifar10(
+        root='./data/cifar10',
         split='test',
-        frame_num=16,
-        data_format=data_format,
         transform=transform
     )
-    test_dataloader = DataLoader(test_dataset, batch_size=2)
+    test_dataloader = DataLoader(test_dataset, batch_size=16)
 
-    backbone = InceptionI3d(num_classes=157, data_format=data_format)
-    model = VideoClassification(backbone)
+    backbone = vgg19(batch_norm=True, data_format=data_format, num_classes=10)
+    # backbone = efficientnet(arch="efficientnet_b1",data_format=data_format, num_classes=10)
+    model = ImageClassification(backbone)
 
     optimizer = tlx.optimizers.Adam(0.0001)
     metric = tlx.metrics.Accuracy()
@@ -81,4 +78,4 @@ if __name__ == "__main__":
         print_train_batch=False
     )
 
-    model.save_weights("./demo/video_classification/model.npz")
+    model.save_weights("model.npz")

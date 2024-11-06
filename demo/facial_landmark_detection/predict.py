@@ -20,12 +20,32 @@ from tlxcv.tasks.facial_landmark_detection import (FacialLandmarkDetection,
                                                    draw_landmarks)
 
 
-if __name__ == '__main__':
+def device_info():
+    found = False
+    if not found and os.system("npu-smi info > /dev/null 2>&1") == 0:
+        cmd = "npu-smi info"
+        found = True
+    elif not found and os.system("nvidia-smi > /dev/null 2>&1") == 0:
+        cmd = "nvidia-smi"
+        found = True
+    elif not found and os.system("ixsmi > /dev/null 2>&1") == 0:
+        cmd = "ixsmi"
+        found = True
+    elif not found and os.system("cnmon > /dev/null 2>&1") == 0:
+        cmd = "cnmon"
+        found = True
+    
+    os.system(cmd)
+    cmd = "lscpu"
+    os.system(cmd)
+    
+if __name__ == "__main__":
+    device_info()
     tlx.set_device('GPU')
 
     backbone = PFLD(data_format=data_format)
     model = FacialLandmarkDetection(backbone)
-    model.load_weights("./demo/facial_landmark_detection/model.npz")
+    model.load_weights("model.npz")
     model.set_eval()
 
     transform = Compose([
@@ -33,10 +53,11 @@ if __name__ == '__main__':
         Normalize(mean=[0, 0, 0], std=[255.0, 255.0, 255.0]),
         ToTensor(data_format=data_format_short)
     ])
-    image = load_image("./demo/facial_landmark_detection/face.jpg")
+    image = load_image("face.jpg")
     input = tlx.expand_dims(transform(image), 0)
 
     landmarks, _ = model.predict(input)
     landmarks = tlx.convert_to_numpy(landmarks[0]).reshape((-1, 2))
+    print(landmarks)
     image = draw_landmarks(image, landmarks)
-    save_image(image, 'result.jpg', './demo/facial_landmark_detection/')
+    save_image(image, 'result.jpg', './')
