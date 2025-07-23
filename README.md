@@ -24,6 +24,9 @@ python demo/image_classification/predict.py
 ```
 
 ## 模型列表 Models
+
+您可从[博翰智能 Apulis](https://www.apulis.cn)或[华为云](https://marketplace.huaweicloud.com/contents/d498a036-f7ae-4fd8-ac33-6b7d2ccc736f)上直接使用其功能。
+
 ### 分类模型 Classification
 
 | 序号 | 模型 | 类别误差 | 前后误差 | 状态 | 参考 |
